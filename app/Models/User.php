@@ -8,11 +8,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
+use App\Traits\HasMatricule;
+use App\Services\MatriculeService;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles;
+    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles, HasMatricule;
 
     /**
      * The attributes that are mass assignable.
@@ -113,5 +115,25 @@ class User extends Authenticatable
     public function isDirector(): bool
     {
         return $this->hasRole('directeur');
+    }
+
+    /**
+     * Générer un matricule pour cet utilisateur basé sur son rôle
+     *
+     * @return string
+     */
+    public function generateMatricule(): string
+    {
+        $matriculeService = app(MatriculeService::class);
+
+        // Obtenir le rôle principal de l'utilisateur
+        $role = $this->roles?->first()?->name;
+
+        if ($role) {
+            return $matriculeService->generateUserMatricule($role, $this->school?->code);
+        }
+
+        // Fallback si pas de rôle assigné
+        return $matriculeService->generateUserMatricule('administrator', $this->school?->code);
     }
 }
