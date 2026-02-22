@@ -4,6 +4,8 @@ export type GetInitialsFn = (fullName: string) => string;
 
 export function useInitials(): GetInitialsFn {
     return useCallback((fullName: string): string => {
+        if (!fullName) return '';
+        
         const names = fullName.trim().split(' ');
 
         if (names.length === 0) return '';
@@ -14,4 +16,9 @@ export function useInitials(): GetInitialsFn {
 
         return `${firstInitial}${lastInitial}`.toUpperCase();
     }, []);
+}
+
+export function getFullName(firstname?: string, lastname?: string): string {
+    if (!firstname && !lastname) return '';
+    return `${firstname || ''} ${lastname || ''}`.trim();
 }

@@ -40,7 +40,7 @@ export default function Profile({
                     <Heading
                         variant="small"
                         title="Profile information"
-                        description="Update your name and email address"
+                        description="Update your personal information and email address"
                     />
 
                     <Form
@@ -53,21 +53,40 @@ export default function Profile({
                         {({ processing, recentlySuccessful, errors }) => (
                             <>
                                 <div className="grid gap-2">
-                                    <Label htmlFor="name">Name</Label>
+                                    <Label htmlFor="firstname">First Name</Label>
 
                                     <Input
-                                        id="name"
+                                        id="firstname"
                                         className="mt-1 block w-full"
-                                        defaultValue={auth.user.name}
-                                        name="name"
+                                        defaultValue={auth.user.firstname}
+                                        name="firstname"
                                         required
-                                        autoComplete="name"
-                                        placeholder="Full name"
+                                        autoComplete="given-name"
+                                        placeholder="First name"
                                     />
 
                                     <InputError
                                         className="mt-2"
-                                        message={errors.name}
+                                        message={errors.firstname}
+                                    />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="lastname">Last Name</Label>
+
+                                    <Input
+                                        id="lastname"
+                                        className="mt-1 block w-full"
+                                        defaultValue={auth.user.lastname}
+                                        name="lastname"
+                                        required
+                                        autoComplete="family-name"
+                                        placeholder="Last name"
+                                    />
+
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.lastname}
                                     />
                                 </div>
 

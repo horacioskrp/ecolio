@@ -6,7 +6,7 @@ import type { AppLayoutProps } from '@/types';
 export default function AppHeaderLayout({
     children,
     breadcrumbs,
-}: AppLayoutProps) {
+}: Readonly<AppLayoutProps>) {
     return (
         <AppShell>
             <AppHeader breadcrumbs={breadcrumbs} />
