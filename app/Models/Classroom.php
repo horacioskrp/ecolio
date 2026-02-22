@@ -15,41 +15,14 @@ class Classroom extends Model
     protected $table = 'classes';
 
     protected $fillable = [
-        'school_id',
-        'academic_year_id',
         'name',
         'code',
         'capacity',
-        'teacher_id',
     ];
 
     protected $casts = [
         'capacity' => 'integer',
     ];
-
-    /**
-     * Get the school this class belongs to.
-     */
-    public function school(): BelongsTo
-    {
-        return $this->belongsTo(School::class);
-    }
-
-    /**
-     * Get the academic year this class belongs to.
-     */
-    public function academicYear(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYear::class);
-    }
-
-    /**
-     * Get the teacher for this class.
-     */
-    public function teacher(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
 
     /**
      * Get all students in this class.

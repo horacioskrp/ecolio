@@ -7,12 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use App\Traits\HasMatricule;
 use App\Services\MatriculeService;
 
 class Student extends Model
 {
-    use HasFactory, HasUuids, HasMatricule;
+    use HasFactory, HasUuids;
 
     protected $fillable = [
         'user_id',
@@ -71,10 +70,7 @@ class Student extends Model
     {
         $matriculeService = app(MatriculeService::class);
 
-        return $matriculeService->generateStudentMatricule(
-            $this->class?->school?->code,
-            $this->class?->code
-        );
+        return $matriculeService->generateStudentMatricule();
     }
 
     /**
@@ -90,10 +86,7 @@ class Student extends Model
             return $this->registration_number;
         }
 
-        return $matriculeService->generateRegistrationNumber(
-            $this->class?->school?->code,
-            $this->class?->code
-        );
+        return $matriculeService->generateRegistrationNumber();
     }
 
     /**

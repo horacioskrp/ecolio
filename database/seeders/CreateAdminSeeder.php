@@ -45,10 +45,8 @@ class CreateAdminSeeder extends Seeder
         $admin = User::create([
             'firstname' => 'Admin',
             'lastname' => 'Système',
-            'name' => 'Admin Système',
             'email' => 'admin@ecoliotogo.tg',
             'password' => bcrypt('admin@123'),  // À changer lors de la première connexion
-            'school_id' => $school->id,
             'gender' => 'male',
             'telephone' => '+228 22 123 456',
             'address' => 'Siège administratif',
