@@ -1,11 +1,11 @@
 import { Head, router } from '@inertiajs/react';
-import { Plus, Pencil, Trash2, Search, BookOpen, CheckCircle2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, BookOpen, CheckCircle2, Eye } from 'lucide-react';
 import { useState } from 'react';
+import { FormDrawer } from '@/components/form-drawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { route } from '@/helpers/route';
 import AppLayout from '@/layouts/app-layout';
-import { FormDrawer } from '@/components/form-drawer';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -66,9 +66,13 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
         });
     };
 
-    const handleSearch = (query: string) => {
-        setSearchQuery(query);
-        router.get(route('schools.index'), { search: query }, { preserveState: true });
+    const handleSearch = () => {
+        router.get(route('schools.index'), { search: searchQuery }, { preserveState: true });
+    };
+
+    const handleClearSearch = () => {
+        setSearchQuery('');
+        router.get(route('schools.index'), { search: '' }, { preserveState: true });
     };
 
     const activeSchools = schools.data.length; // À améliorer avec un champ active en DB
@@ -169,10 +173,26 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                         type="text"
                                         placeholder="Rechercher une école..."
                                         value={searchQuery}
-                                        onChange={(e) => handleSearch(e.target.value)}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
                                         className="pl-10 bg-gray-50 border-gray-300"
                                     />
                                 </div>
+                                <Button
+                                    onClick={handleSearch}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                >
+                                    <Search className="w-4 h-4" />
+                                    Rechercher
+                                </Button>
+                                {searchQuery && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleClearSearch}
+                                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    >
+                                        Réinitialiser
+                                    </Button>
+                                )}
                             </div>
                         </div>
 
@@ -230,6 +250,14 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <div className="flex gap-2 justify-center">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                                                                onClick={() => router.visit(route('schools.show', school.id))}
+                                                            >
+                                                                <Eye className="w-4 h-4" />
+                                                            </Button>
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"

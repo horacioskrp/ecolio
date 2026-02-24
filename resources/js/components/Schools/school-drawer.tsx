@@ -1,9 +1,10 @@
 import { useForm } from '@inertiajs/react';
+import { useEffect } from 'react';
 import { CreateDrawer } from '@/components/create-drawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { route } from '@/helpers/route';
+import { Textarea } from '@/components/ui/textarea';
 
 interface SchoolData {
     id?: string;
@@ -26,7 +27,7 @@ export function SchoolDrawer({
     onOpenChange,
     school,
     onSuccess,
-}: SchoolDrawerProps) {
+}: Readonly<SchoolDrawerProps>) {
     const isEditing = !!school?.id;
 
     const { data, setData, post, put, processing, reset, errors } = useForm({
@@ -37,7 +38,22 @@ export function SchoolDrawer({
         address: school?.address || '',
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    // Réinitialiser le formulaire quand school change ou le drawer s'ouvre
+    useEffect(() => {
+        if (isOpen && school?.id) {
+            setData({
+                name: school.name,
+                code: school.code,
+                email: school.email || '',
+                phone: school.phone || '',
+                address: school.address || '',
+            });
+        } else if (isOpen && !school?.id) {
+            reset();
+        }
+    }, [school?.id, isOpen]);
+
+    const handleSubmit = (e: React.SubmitEvent) => {
         e.preventDefault();
 
         if (isEditing && school?.id) {
@@ -201,20 +217,20 @@ export function SchoolDrawer({
                 </div>
 
                 {/* Submit Button */}
-                <div className="flex gap-3 justify-end pt-6 border-t border-gray-200">
+                <div className="flex gap-3 pt-6 border-t border-gray-200">
                     <Button
                         type="button"
                         variant="outline"
                         onClick={() => handleOpenChange(false)}
                         disabled={processing}
-                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                        className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
                     >
                         Annuler
                     </Button>
                     <Button
                         type="submit"
                         disabled={processing}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                     >
                         {processing
                             ? isEditing

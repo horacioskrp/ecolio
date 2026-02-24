@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { route } from '@/helpers/route';
+import AppLayout from '@/layouts/app-layout';
 
 interface School {
     id: string;
@@ -19,7 +19,7 @@ interface ShowProps {
     school: School;
 }
 
-export default function Show({ school }: ShowProps) {
+export default function Show({ school }: Readonly<ShowProps>) {
     return (
         <AppLayout>
             <Head title={school.name} />

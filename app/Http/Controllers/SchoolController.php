@@ -14,7 +14,17 @@ class SchoolController extends Controller
      */
     public function index()
     {
-        $schools = School::orderBy('name')->paginate(10);
+        $query = School::query();
+
+        // Recherche par nom, code ou email
+        if (request('search')) {
+            $search = request('search');
+            $query->where('name', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+        }
+
+        $schools = $query->orderBy('created_at', 'desc')->paginate(10);
 
         return Inertia::render('Schools/Index', [
             'schools' => $schools,
