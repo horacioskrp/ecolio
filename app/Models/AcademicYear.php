@@ -34,11 +34,5 @@ class AcademicYear extends Model
         return $this->belongsTo(School::class);
     }
 
-    /**
-     * Get all classes in this academic year.
-     */
-    public function classes(): HasMany
-    {
-        return $this->hasMany(Classroom::class);
-    }
 }
+

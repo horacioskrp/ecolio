@@ -4,15 +4,18 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
+use App\Traits\HasMatricule;
+use App\Services\MatriculeService;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles;
+    use HasFactory, HasUuids, Notifiable, TwoFactorAuthenticatable, HasRoles, HasMatricule;
 
     /**
      * The attributes that are mass assignable.
@@ -23,13 +26,12 @@ class User extends Authenticatable
         'natricule',
         'firstname',
         'lastname',
-        'name',
         'gender',
+        'birth_date',
         'telephone',
         'profile',
         'email',
         'address',
-        'school_id',
         'password',
     ];
 
@@ -56,6 +58,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'birth_date' => 'date',
         ];
     }
 
@@ -65,14 +68,6 @@ class User extends Authenticatable
     public function hasAnyRole(array $roles): bool
     {
         return $this->hasAnyRole($roles);
-    }
-
-    /**
-     * Get the school this user belongs to.
-     */
-    public function school()
-    {
-        return $this->belongsTo(School::class);
     }
 
     /**
@@ -113,5 +108,25 @@ class User extends Authenticatable
     public function isDirector(): bool
     {
         return $this->hasRole('directeur');
+    }
+
+    /**
+     * Générer un matricule pour cet utilisateur basé sur son rôle
+     *
+     * @return string
+     */
+    public function generateMatricule(): string
+    {
+        $matriculeService = app(MatriculeService::class);
+
+        // Obtenir le rôle principal de l'utilisateur
+        $role = $this->roles?->first()?->name;
+
+        if ($role) {
+            return $matriculeService->generateUserMatricule($role);
+        }
+
+        // Fallback si pas de rôle assigné
+        return $matriculeService->generateUserMatricule('administrator');
     }
 }

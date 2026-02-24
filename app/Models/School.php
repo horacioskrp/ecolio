@@ -36,22 +36,6 @@ class School extends Model
     }
 
     /**
-     * Get all classes for the school.
-     */
-    public function classes(): HasMany
-    {
-        return $this->hasMany(Classroom::class);
-    }
-
-    /**
-     * Get all users (staff) for the school.
-     */
-    public function users(): HasMany
-    {
-        return $this->hasMany(User::class);
-    }
-
-    /**
      * Get all subjects for the school.
      */
     public function subjects(): HasMany

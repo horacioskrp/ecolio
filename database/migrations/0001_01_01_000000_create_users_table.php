@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('natricule')->unique();
             $table->string('firstname');
             $table->string('lastname');
-            $table->date('birth_date');
+            $table->string('name')->unique()->nullable();
             $table->enum('gender', ['male', 'female', 'other']);
             $table->string('telephone')->nullable();
             $table->string('profile')->nullable();

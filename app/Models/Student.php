@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Services\MatriculeService;
 
 class Student extends Model
 {
@@ -58,5 +59,48 @@ class Student extends Model
     public function grades(): HasMany
     {
         return $this->hasMany(Grade::class);
+    }
+
+    /**
+     * Générer un matricule pour cet élève
+     *
+     * @return string
+     */
+    public function generateMatricule(): string
+    {
+        $matriculeService = app(MatriculeService::class);
+
+        return $matriculeService->generateStudentMatricule();
+    }
+
+    /**
+     * Générer un numéro d'enregistrement si absent
+     *
+     * @return string
+     */
+    public function generateRegistrationNumber(): string
+    {
+        $matriculeService = app(MatriculeService::class);
+
+        if ($this->registration_number) {
+            return $this->registration_number;
+        }
+
+        return $matriculeService->generateRegistrationNumber();
+    }
+
+    /**
+     * Boot the model
+     */
+    public static function boot()
+    {
+        parent::boot();
+
+        // Auto-générer le numéro d'enregistrement avant création
+        static::creating(function ($model) {
+            if (empty($model->registration_number)) {
+                $model->registration_number = $model->generateRegistrationNumber();
+            }
+        });
     }
 }

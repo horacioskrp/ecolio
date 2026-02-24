@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Student;
+use App\Models\User;
+use App\Observers\StudentObserver;
+use App\Observers\UserObserver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +28,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->registerObservers();
+    }
+
+    /**
+     * Register model observers.
+     */
+    protected function registerObservers(): void
+    {
+        User::observe(UserObserver::class);
+        Student::observe(StudentObserver::class);
     }
 
     /**

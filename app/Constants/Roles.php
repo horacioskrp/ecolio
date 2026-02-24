@@ -38,7 +38,8 @@ class Roles
             self::DIRECTOR => 'Directeur',
             self::TEACHER => 'Enseignant',
             self::ACCOUNTING => 'Comptabilité',
-            self::SECRETARIAT => 'Secrétaria
+            self::SECRETARIAT => 'Secrétariat',
+        ];
     }
 
     /**
