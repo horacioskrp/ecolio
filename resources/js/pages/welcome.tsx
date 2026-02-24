@@ -3,9 +3,9 @@ import { dashboard, login, register } from '@/routes';
 
 export default function Welcome({
     canRegister = true,
-}: {
+}: Readonly<{
     canRegister?: boolean;
-}) {
+}>) {
     const { auth } = usePage().props;
 
     return (
