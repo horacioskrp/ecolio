@@ -24,6 +24,24 @@ export function route(name: string, params?: any): string {
             'schools.edit': `/schools/${params}/edit`,
             'schools.update': `/schools/${params}`,
             'schools.destroy': `/schools/${params}`,
+
+            // Classrooms routes
+            'classrooms.index': '/classrooms',
+            'classrooms.create': '/classrooms/create',
+            'classrooms.store': '/classrooms',
+            'classrooms.show': `/classrooms/${params}`,
+            'classrooms.edit': `/classrooms/${params}/edit`,
+            'classrooms.update': `/classrooms/${params}`,
+            'classrooms.destroy': `/classrooms/${params}`,
+
+            // Classroom Types routes
+            'classroom-types.index': '/classroom-types',
+            'classroom-types.create': '/classroom-types/create',
+            'classroom-types.store': '/classroom-types',
+            'classroom-types.show': `/classroom-types/${params}`,
+            'classroom-types.edit': `/classroom-types/${params}/edit`,
+            'classroom-types.update': `/classroom-types/${params}`,
+            'classroom-types.destroy': `/classroom-types/${params}`,
             
             // Add more routes as needed
         };

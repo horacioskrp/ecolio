@@ -1,40 +1,44 @@
-import { useState, ReactNode } from 'react';
-import { SchoolDrawer } from '@/components/Schools/school-drawer';
+import { useState, type ReactNode } from 'react';
 
-interface School {
-    id: string;
-    name: string;
-    code: string;
-    email: string | null;
-    phone: string | null;
-    address: string | null;
+interface FormDrawerHandlers<T> {
+    onOpenCreate: () => void;
+    onOpenEdit: (item: T) => void;
 }
 
-interface FormDrawerProps {
-    children: (handlers: {
-        onOpenCreate: () => void;
-        onOpenEdit: (school: School) => void;
-    }) => ReactNode;
+interface FormDrawerRenderProps<T> {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    selectedItem: T | null;
     onSuccess?: () => void;
 }
 
-export function FormDrawer({ children, onSuccess }: Readonly<FormDrawerProps>) {
+interface FormDrawerProps<T> {
+    children: (handlers: FormDrawerHandlers<T>) => ReactNode;
+    renderDrawer: (props: FormDrawerRenderProps<T>) => ReactNode;
+    onSuccess?: () => void;
+}
+
+export function FormDrawer<T>({
+    children,
+    renderDrawer,
+    onSuccess,
+}: Readonly<FormDrawerProps<T>>) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-    const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
+    const [selectedItem, setSelectedItem] = useState<T | null>(null);
 
     const handleOpenCreateDrawer = () => {
-        setSelectedSchool(null);
+        setSelectedItem(null);
         setIsDrawerOpen(true);
     };
 
-    const handleOpenEditDrawer = (school: School) => {
-        setSelectedSchool(school);
+    const handleOpenEditDrawer = (item: T) => {
+        setSelectedItem(item);
         setIsDrawerOpen(true);
     };
 
     const handleCloseDrawer = () => {
         setIsDrawerOpen(false);
-        setSelectedSchool(null);
+        setSelectedItem(null);
     };
 
     return (
@@ -44,12 +48,12 @@ export function FormDrawer({ children, onSuccess }: Readonly<FormDrawerProps>) {
                 onOpenEdit: handleOpenEditDrawer,
             })}
 
-            <SchoolDrawer
-                isOpen={isDrawerOpen}
-                onOpenChange={handleCloseDrawer}
-                school={selectedSchool}
-                onSuccess={onSuccess}
-            />
+            {renderDrawer({
+                isOpen: isDrawerOpen,
+                onOpenChange: handleCloseDrawer,
+                selectedItem,
+                onSuccess,
+            })}
         </>
     );
 }

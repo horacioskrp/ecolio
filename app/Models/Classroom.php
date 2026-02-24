@@ -18,11 +18,22 @@ class Classroom extends Model
         'name',
         'code',
         'capacity',
+        'active',
+        'classroom_type_id',
     ];
 
     protected $casts = [
         'capacity' => 'integer',
+        'active' => 'boolean',
     ];
+
+    /**
+     * Get the classroom type for this classroom.
+     */
+    public function type(): BelongsTo
+    {
+        return $this->belongsTo(ClassroomType::class, 'classroom_type_id');
+    }
 
     /**
      * Get all students in this class.
