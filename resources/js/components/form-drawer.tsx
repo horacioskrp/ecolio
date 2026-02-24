@@ -18,7 +18,7 @@ interface FormDrawerProps {
     onSuccess?: () => void;
 }
 
-export function FormDrawer({ children, onSuccess }: FormDrawerProps) {
+export function FormDrawer({ children, onSuccess }: Readonly<FormDrawerProps>) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
 
