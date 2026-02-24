@@ -1,8 +1,8 @@
 import { Head, router } from '@inertiajs/react';
-import { Plus, Pencil, Trash2, Search, BookOpen, CheckCircle2, Eye } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Layers, Users, Eye } from 'lucide-react';
 import { useState } from 'react';
+import { ClassroomDrawer } from '@/components/Classrooms/classroom-drawer';
 import { FormDrawer } from '@/components/form-drawer';
-import { SchoolDrawer } from '@/components/Schools/school-drawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { route } from '@/helpers/route';
@@ -25,17 +25,22 @@ import {
     TableRow,
 } from '@/components/ui/table';
 
-interface School {
+interface ClassroomType {
+    id: string;
+    name: string;
+}
+
+interface Classroom {
     id: string;
     name: string;
     code: string;
-    email: string | null;
-    phone: string | null;
-    address: string | null;
+    capacity: number;
+    classroom_type_id?: string | null;
+    type?: ClassroomType | null;
 }
 
-interface PaginatedSchools {
-    data: School[];
+interface PaginatedClassrooms {
+    data: Classroom[];
     current_page: number;
     from: number;
     last_page: number;
@@ -45,18 +50,20 @@ interface PaginatedSchools {
 }
 
 interface IndexProps {
-    schools: PaginatedSchools;
+    classrooms: PaginatedClassrooms;
+    activeCount: number;
+    classroomTypes?: ClassroomType[];
     message?: string;
 }
 
-export default function Index({ schools, message }: Readonly<IndexProps>) {
+export default function Index({ classrooms, activeCount, classroomTypes = [], message }: Readonly<IndexProps>) {
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const handleDelete = (schoolId: string) => {
+    const handleDelete = (classroomId: string) => {
         setIsDeleting(true);
-        router.delete(route('schools.destroy', schoolId), {
+        router.delete(route('classrooms.destroy', classroomId), {
             onSuccess: () => {
                 setDeleteConfirm(null);
                 setIsDeleting(false);
@@ -68,37 +75,36 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
     };
 
     const handleSearch = () => {
-        router.get(route('schools.index'), { search: searchQuery }, { preserveState: true });
+        router.get(route('classrooms.index'), { search: searchQuery }, { preserveState: true });
     };
 
     const handleClearSearch = () => {
         setSearchQuery('');
-        router.get(route('schools.index'), { search: '' }, { preserveState: true });
+        router.get(route('classrooms.index'), { search: '' }, { preserveState: true });
     };
 
-    const activeSchools = schools.data.length; // À améliorer avec un champ active en DB
+    const pageCapacity = classrooms.data.reduce((total, item) => total + item.capacity, 0);
 
-    // Stat Cards
     const statsCards = [
         {
-            title: 'Total des écoles',
-            value: schools.total,
-            icon: BookOpen,
+            title: 'Total des classes',
+            value: classrooms.total,
+            icon: Layers,
             bgColor: 'bg-blue-50',
             textColor: 'text-blue-600',
             borderColor: 'border-blue-200',
         },
         {
-            title: 'Écoles actives',
-            value: activeSchools,
-            icon: CheckCircle2,
+            title: 'Classes actives',
+            value: activeCount,
+            icon: Users,
             bgColor: 'bg-green-50',
             textColor: 'text-green-600',
             borderColor: 'border-green-200',
         },
         {
             title: 'Page',
-            value: `${schools.current_page}/${schools.last_page}`,
+            value: `${classrooms.current_page}/${classrooms.last_page}`,
             icon: Plus,
             bgColor: 'bg-purple-50',
             textColor: 'text-purple-600',
@@ -107,42 +113,41 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
     ];
 
     return (
-        <FormDrawer<School>
+        <FormDrawer<Classroom>
             onSuccess={() => router.reload()}
             renderDrawer={({ isOpen, onOpenChange, selectedItem, onSuccess }) => (
-                <SchoolDrawer
+                <ClassroomDrawer
                     isOpen={isOpen}
                     onOpenChange={onOpenChange}
-                    school={selectedItem}
+                    classroom={selectedItem}
                     onSuccess={onSuccess}
+                    classroomTypes={classroomTypes}
                 />
             )}
         >
             {({ onOpenCreate, onOpenEdit }) => (
                 <AppLayout>
-                    <Head title="Écoles" />
+                    <Head title="Classes" />
 
                     <div className="space-y-6">
-                        {/* Header avec titre et bouton */}
                         <div className="flex items-start justify-between">
                             <div>
                                 <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-                                    Écoles
+                                    Classes
                                 </h1>
                                 <p className="mt-2 text-lg text-gray-600">
-                                    Gérez les écoles de votre institution
+                                    Gérez les classes de votre établissement
                                 </p>
                             </div>
-                            <Button 
+                            <Button
                                 onClick={onOpenCreate}
                                 className="gap-2 bg-blue-600 hover:bg-blue-700"
                             >
                                 <Plus className="w-5 h-5" />
-                                Nouvelle école
+                                Nouvelle classe
                             </Button>
                         </div>
 
-                        {/* Stats Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {statsCards.map((stat, index) => {
                                 const Icon = stat.icon;
@@ -167,22 +172,20 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                             })}
                         </div>
 
-                        {/* Message d'alerte */}
                         {message && (
                             <div className="bg-green-50 text-green-800 px-4 py-3 rounded-lg flex items-center gap-3 shadow-sm">
-                                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                                <Users className="w-5 h-5 flex-shrink-0" />
                                 <span>{message}</span>
                             </div>
                         )}
 
-                        {/* Barre de recherche */}
                         <div className="bg-white rounded-lg p-4 shadow-sm">
                             <div className="flex gap-4">
                                 <div className="flex-1 relative">
                                     <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                                     <Input
                                         type="text"
-                                        placeholder="Rechercher une école..."
+                                        placeholder="Rechercher une classe..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         className="pl-10 bg-gray-50 border-gray-300"
@@ -207,7 +210,6 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                             </div>
                         </div>
 
-                        {/* Table */}
                         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                             <div className="overflow-x-auto">
                                 <Table>
@@ -215,49 +217,51 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                         <TableRow className="border-b border-gray-200">
                                             <TableHead className="font-semibold text-gray-900">Nom</TableHead>
                                             <TableHead className="font-semibold text-gray-900">Code</TableHead>
-                                            <TableHead className="font-semibold text-gray-900">E-mail</TableHead>
-                                            <TableHead className="font-semibold text-gray-900">Téléphone</TableHead>
-                                            <TableHead className="font-semibold text-gray-900">Adresse</TableHead>
-                                            <TableHead className="text-center font-semibold text-gray-900 w-24">Actions</TableHead>
+                                            <TableHead className="font-semibold text-gray-900">Type</TableHead>
+                                            <TableHead className="font-semibold text-gray-900">Capacité</TableHead>
+                                            <TableHead className="text-center font-semibold text-gray-900 w-28">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {schools.data.length === 0 ? (
+                                        {classrooms.data.length === 0 ? (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={6}
+                                                    colSpan={5}
                                                     className="text-center py-12 text-gray-500"
                                                 >
                                                     <div className="flex flex-col items-center gap-2">
-                                                        <BookOpen className="w-12 h-12 text-gray-300" />
-                                                        <p className="text-lg">Aucune école trouvée</p>
+                                                        <Layers className="w-12 h-12 text-gray-300" />
+                                                        <p className="text-lg">Aucune classe trouvée</p>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            schools.data.map((school) => (
-                                                <TableRow key={school.id} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors">
+                                            classrooms.data.map((classroom) => (
+                                                <TableRow key={classroom.id} className="border-b border-gray-100 hover:bg-blue-50/40 transition-colors">
                                                     <TableCell className="font-semibold text-gray-900">
                                                         <div className="flex items-center gap-3">
                                                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                                                                <BookOpen className="h-5 w-5 text-blue-600" />
+                                                                <Layers className="h-5 w-5 text-blue-600" />
                                                             </div>
-                                                            <span>{school.name}</span>
+                                                            <span>{classroom.name}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-gray-600">
                                                         <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-sm font-medium">
-                                                            {school.code}
+                                                            {classroom.code}
                                                         </span>
                                                     </TableCell>
                                                     <TableCell className="text-gray-600">
-                                                        {school.email || <span className="text-gray-400">-</span>}
+                                                        {classroom.type?.name ? (
+                                                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-medium">
+                                                                {classroom.type.name}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-gray-400">—</span>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-gray-600">
-                                                        {school.phone || <span className="text-gray-400">-</span>}
-                                                    </TableCell>
-                                                    <TableCell className="text-gray-600 max-w-xs truncate">
-                                                        {school.address || <span className="text-gray-400">-</span>}
+                                                        {classroom.capacity}
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <div className="flex gap-2 justify-center">
@@ -265,7 +269,7 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                                                 variant="outline"
                                                                 size="sm"
                                                                 className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                                                                onClick={() => router.visit(route('schools.show', school.id))}
+                                                                onClick={() => router.visit(route('classrooms.show', classroom.id))}
                                                             >
                                                                 <Eye className="w-4 h-4" />
                                                             </Button>
@@ -273,7 +277,7 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                                                 variant="outline"
                                                                 size="sm"
                                                                 className="border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                                                                onClick={() => onOpenEdit(school)}
+                                                                onClick={() => onOpenEdit(classroom)}
                                                             >
                                                                 <Pencil className="w-4 h-4" />
                                                             </Button>
@@ -281,11 +285,7 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                                                 variant="outline"
                                                                 size="sm"
                                                                 className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                                                onClick={() =>
-                                                                    setDeleteConfirm(
-                                                                        school.id
-                                                                    )
-                                                                }
+                                                                onClick={() => setDeleteConfirm(classroom.id)}
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
                                                             </Button>
@@ -299,30 +299,41 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                             </div>
                         </div>
 
-                        {/* Pagination */}
-                        {schools.last_page > 1 && (
+                        {classrooms.last_page > 1 && (
                             <div className="flex items-center justify-between bg-white rounded-lg p-4 shadow-sm">
                                 <div className="text-sm text-gray-600">
-                                    Affichage de <span className="font-semibold">{schools.from}</span> à{' '}
-                                    <span className="font-semibold">{schools.to}</span> sur{' '}
-                                    <span className="font-semibold">{schools.total}</span> écoles
+                                    Affichage de <span className="font-semibold">{classrooms.from}</span> à{' '}
+                                    <span className="font-semibold">{classrooms.to}</span> sur{' '}
+                                    <span className="font-semibold">{classrooms.total}</span> classes
                                 </div>
                                 <div className="flex gap-2">
-                                    {schools.current_page > 1 && (
-                                        <Button 
+                                    {classrooms.current_page > 1 && (
+                                        <Button
                                             variant="outline"
-                                            onClick={() => router.get(route('schools.index'), { page: schools.current_page - 1 }, { preserveState: true })}
+                                            onClick={() =>
+                                                router.get(
+                                                    route('classrooms.index'),
+                                                    { page: classrooms.current_page - 1 },
+                                                    { preserveState: true }
+                                                )
+                                            }
                                         >
                                             ← Précédent
                                         </Button>
                                     )}
                                     <span className="flex items-center px-4 text-sm font-medium text-gray-700">
-                                        Page {schools.current_page} sur {schools.last_page}
+                                        Page {classrooms.current_page} sur {classrooms.last_page}
                                     </span>
-                                    {schools.current_page < schools.last_page && (
-                                        <Button 
+                                    {classrooms.current_page < classrooms.last_page && (
+                                        <Button
                                             variant="outline"
-                                            onClick={() => router.get(route('schools.index'), { page: schools.current_page + 1 }, { preserveState: true })}
+                                            onClick={() =>
+                                                router.get(
+                                                    route('classrooms.index'),
+                                                    { page: classrooms.current_page + 1 },
+                                                    { preserveState: true }
+                                                )
+                                            }
                                         >
                                             Suivant →
                                         </Button>
@@ -340,9 +351,9 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                     >
                         <AlertDialogContent>
                             <AlertDialogHeader>
-                                <AlertDialogTitle>Supprimer l'école</AlertDialogTitle>
+                                <AlertDialogTitle>Supprimer la classe</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    Êtes-vous sûr de vouloir supprimer cette école ?
+                                    Êtes-vous sûr de vouloir supprimer cette classe ?
                                     Cette action est irréversible.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
@@ -351,9 +362,7 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                                     Annuler
                                 </AlertDialogCancel>
                                 <AlertDialogAction
-                                    onClick={() =>
-                                        deleteConfirm && handleDelete(deleteConfirm)
-                                    }
+                                    onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
                                     disabled={isDeleting}
                                     className="bg-red-600 hover:bg-red-700"
                                 >

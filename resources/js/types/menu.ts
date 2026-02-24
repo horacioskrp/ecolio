@@ -1,4 +1,4 @@
-import { BookOpen, GraduationCap, LayoutGrid, Settings, Users } from 'lucide-react';
+import { BookOpen, GraduationCap, LayoutGrid, Layers, Settings, Tag, Users } from 'lucide-react';
 import { route } from '@/helpers/route';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
@@ -18,6 +18,16 @@ export const mainNavItems: NavItem[] = [
                 title: 'Écoles',
                 href: route('schools.index'),
                 icon: BookOpen,
+            },
+            {
+                title: 'Classes',
+                href: route('classrooms.index'),
+                icon: Layers,
+            },
+            {
+                title: 'Types de classes',
+                href: route('classroom-types.index'),
+                icon: Tag,
             },
         ],
     },
