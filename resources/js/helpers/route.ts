@@ -42,6 +42,33 @@ export function route(name: string, params?: any): string {
             'classroom-types.edit': `/classroom-types/${params}/edit`,
             'classroom-types.update': `/classroom-types/${params}`,
             'classroom-types.destroy': `/classroom-types/${params}`,
+
+            // Roles routes
+            'roles.index': '/roles',
+            'roles.create': '/roles/create',
+            'roles.store': '/roles',
+            'roles.show': `/roles/${params}`,
+            'roles.edit': `/roles/${params}/edit`,
+            'roles.update': `/roles/${params}`,
+            'roles.destroy': `/roles/${params}`,
+
+            // Permissions routes
+            'permissions.index': '/permissions',
+            'permissions.create': '/permissions/create',
+            'permissions.store': '/permissions',
+            'permissions.show': `/permissions/${params}`,
+            'permissions.edit': `/permissions/${params}/edit`,
+            'permissions.update': `/permissions/${params}`,
+            'permissions.destroy': `/permissions/${params}`,
+
+            // Users routes
+            'users.index': '/users',
+            'users.create': '/users/create',
+            'users.store': '/users',
+            'users.show': `/users/${params}`,
+            'users.edit': `/users/${params}/edit`,
+            'users.update': `/users/${params}`,
+            'users.destroy': `/users/${params}`,
             
             // Add more routes as needed
         };

@@ -3,10 +3,6 @@ import { Plus, Pencil, Trash2, Search, BookOpen, CheckCircle2, Eye } from 'lucid
 import { useState } from 'react';
 import { FormDrawer } from '@/components/form-drawer';
 import { SchoolDrawer } from '@/components/Schools/school-drawer';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { route } from '@/helpers/route';
-import AppLayout from '@/layouts/app-layout';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -16,6 +12,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Table,
     TableBody,
@@ -24,6 +22,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { route } from '@/helpers/route';
+import AppLayout from '@/layouts/app-layout';
 
 interface School {
     id: string;
@@ -144,11 +144,11 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
 
                         {/* Stats Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {statsCards.map((stat, index) => {
+                            {statsCards.map((stat) => {
                                 const Icon = stat.icon;
                                 return (
                                     <div
-                                        key={index}
+                                        key={stat.title}
                                         className={`${stat.bgColor} rounded-lg p-6 transition-all hover:shadow-md shadow-sm`}
                                     >
                                         <div className="flex items-center justify-between">
@@ -170,7 +170,7 @@ export default function Index({ schools, message }: Readonly<IndexProps>) {
                         {/* Message d'alerte */}
                         {message && (
                             <div className="bg-green-50 text-green-800 px-4 py-3 rounded-lg flex items-center gap-3 shadow-sm">
-                                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                                <CheckCircle2 className="w-5 h-5 shrink-0" />
                                 <span>{message}</span>
                             </div>
                         )}

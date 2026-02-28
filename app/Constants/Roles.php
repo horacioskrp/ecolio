@@ -33,8 +33,7 @@ class Roles
     public static function labels(): array
     {
         return [
-            self::ADMIN => 'Administrateur',
-            self::DIRECISTRATOR => 'Administrateur',
+            self::ADMINISTRATOR => 'Administrateur',
             self::DIRECTOR => 'Directeur',
             self::TEACHER => 'Enseignant',
             self::ACCOUNTING => 'Comptabilité',
