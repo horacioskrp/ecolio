@@ -60,7 +60,7 @@ export default function Edit({ settings }: Readonly<{ settings: Settings }>) {
     return (
         <AppLayout>
             <Head title="Réglages de paie" />
-            <form onSubmit={submit} className="space-y-6 max-w-3xl">
+            <form onSubmit={submit} className="space-y-6 w-full">
                 <div className="flex items-center gap-4">
                     <button type="button" onClick={() => router.get(route('payroll.overview'))} className="p-2 hover:bg-gray-100 rounded-lg transition">
                         <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -76,6 +76,7 @@ export default function Edit({ settings }: Readonly<{ settings: Settings }>) {
                     Ces cotisations et impôts sont <strong>désactivés par défaut</strong>. Les taux/barèmes fournis sont indicatifs — vérifiez-les auprès de la réglementation en vigueur avant activation.
                 </div>
 
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 {/* Ancienneté */}
                 <section className="rounded-2xl bg-linear-to-br from-amber-50 to-white ring-1 ring-amber-100 p-6 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 text-amber-700"><Clock className="h-4 w-4" /><p className="text-sm font-semibold">Prime d'ancienneté</p></div>
@@ -118,7 +119,7 @@ export default function Edit({ settings }: Readonly<{ settings: Settings }>) {
                 </section>
 
                 {/* ITS */}
-                <section className="rounded-2xl bg-linear-to-br from-slate-50 to-white ring-1 ring-slate-100 p-6 shadow-sm space-y-4">
+                <section className="xl:col-span-2 rounded-2xl bg-linear-to-br from-slate-50 to-white ring-1 ring-slate-100 p-6 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 text-slate-700"><Landmark className="h-4 w-4" /><p className="text-sm font-semibold">ITS — Impôt sur les traitements et salaires</p></div>
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                         <Checkbox checked={data.its_enabled} onCheckedChange={c => setData('its_enabled', c === true)} /> Activer l'ITS (barème progressif)
@@ -142,6 +143,7 @@ export default function Edit({ settings }: Readonly<{ settings: Settings }>) {
                         </Button>
                     </div>
                 </section>
+                </div>
 
                 <div className="flex gap-3">
                     <Button type="submit" disabled={processing} className="gap-2 bg-blue-600 hover:bg-blue-700"><Save className="w-4 h-4" /> {processing ? 'Enregistrement...' : 'Enregistrer les réglages'}</Button>
