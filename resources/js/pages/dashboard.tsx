@@ -203,7 +203,7 @@ function KpiCard({ title, value, sub, icon: Icon, color }: {
     };
     const { bg, text } = styles[color];
     return (
-        <div className={`${bg} rounded-xl p-5 shadow-sm`}>
+        <div className={`${bg} rounded-xl p-5 shadow-sm min-h-28 flex flex-col justify-center`}>
             <div className="flex items-start justify-between">
                 <div className="min-w-0">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{title}</p>
@@ -341,55 +341,6 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                     </div>
                 )}
 
-                {/* ── KPIs financiers ──────────────────────────────────── */}
-                {isFinancial && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <KpiCard
-                            title="Total facturé"
-                            value={fmt(Number(stats?.total_amount ?? 0))}
-                            sub={`${stats?.total_invoices ?? 0} factures`}
-                            icon={Banknote}
-                            color="blue"
-                        />
-                        <KpiCard
-                            title="Encaissé"
-                            value={fmt(Number(stats?.total_paid ?? 0))}
-                            sub={`Taux ${collectedPct}%`}
-                            icon={CheckCircle2}
-                            color="green"
-                        />
-                        <KpiCard
-                            title="Reste à recouvrer"
-                            value={fmt(Number(stats?.total_remaining ?? 0))}
-                            sub={`${(stats?.issued_count ?? 0) + (stats?.partial_count ?? 0)} dossiers ouverts`}
-                            icon={AlertCircle}
-                            color="orange"
-                        />
-                        <KpiCard
-                            title="Soldés / Impayés"
-                            value={`${stats?.paid_count ?? 0} / ${stats?.issued_count ?? 0}`}
-                            sub={`${stats?.partial_count ?? 0} paiements partiels`}
-                            icon={XCircle}
-                            color="red"
-                        />
-                    </div>
-                )}
-
-                {/* ── Comptabilité : synthèse du mois ───────────────────────── */}
-                {isFinancial && (
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                        <KpiCard title="Encaissé (mois)" value={fmt(financial.month.income)} sub="Ce mois-ci" icon={TrendingUp} color="green" />
-                        <KpiCard title="Dépenses (mois)" value={fmt(financial.month.expenses)} sub="Ce mois-ci" icon={TrendingDown} color="red" />
-                        <KpiCard
-                            title="Solde net (mois)"
-                            value={fmt(financial.month.net)}
-                            sub={financial.month.net >= 0 ? 'Excédent' : 'Déficit'}
-                            icon={Wallet}
-                            color={financial.month.net >= 0 ? 'blue' : 'orange'}
-                        />
-                    </div>
-                )}
-
                 {/* ── KPIs inscriptions ─────────────────────────────────── */}
                 {isEnrollment && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -415,7 +366,7 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                             color="green"
                         />
                         {isFinancial && (
-                            <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm flex flex-col justify-between">
+                            <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm flex flex-col justify-center min-h-28">
                                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Taux de recouvrement</p>
                                 <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{collectedPct}%</p>
                                 <ProgressBar
@@ -491,6 +442,49 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                             sub={`${academic.exam_registrations} inscription${academic.exam_registrations > 1 ? 's' : ''}`}
                             icon={GraduationCap}
                             color="blue"
+                        />
+                    </div>
+                )}
+
+                {/* ── KPIs financiers (facturation + synthèse du mois) ─────── */}
+                {isFinancial && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <KpiCard
+                            title="Total facturé"
+                            value={fmt(Number(stats?.total_amount ?? 0))}
+                            sub={`${stats?.total_invoices ?? 0} factures`}
+                            icon={Banknote}
+                            color="blue"
+                        />
+                        <KpiCard
+                            title="Encaissé"
+                            value={fmt(Number(stats?.total_paid ?? 0))}
+                            sub={`Taux ${collectedPct}%`}
+                            icon={CheckCircle2}
+                            color="green"
+                        />
+                        <KpiCard
+                            title="Reste à recouvrer"
+                            value={fmt(Number(stats?.total_remaining ?? 0))}
+                            sub={`${(stats?.issued_count ?? 0) + (stats?.partial_count ?? 0)} dossiers ouverts`}
+                            icon={AlertCircle}
+                            color="orange"
+                        />
+                        <KpiCard
+                            title="Soldés / Impayés"
+                            value={`${stats?.paid_count ?? 0} / ${stats?.issued_count ?? 0}`}
+                            sub={`${stats?.partial_count ?? 0} paiements partiels`}
+                            icon={XCircle}
+                            color="red"
+                        />
+                        <KpiCard title="Encaissé (mois)" value={fmt(financial.month.income)} sub="Ce mois-ci" icon={TrendingUp} color="green" />
+                        <KpiCard title="Dépenses (mois)" value={fmt(financial.month.expenses)} sub="Ce mois-ci" icon={TrendingDown} color="red" />
+                        <KpiCard
+                            title="Solde net (mois)"
+                            value={fmt(financial.month.net)}
+                            sub={financial.month.net >= 0 ? 'Excédent' : 'Déficit'}
+                            icon={Wallet}
+                            color={financial.month.net >= 0 ? 'blue' : 'orange'}
                         />
                     </div>
                 )}
@@ -575,7 +569,7 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                         <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                                         <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={48}
                                             tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
-                                        <RTooltip formatter={(v: number) => [fmt(Number(v)), 'Encaissé']} labelFormatter={() => ''} />
+                                        <RTooltip formatter={(v) => [fmt(Number(v)), 'Encaissé']} labelFormatter={() => ''} />
                                         <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} fill="url(#payGrad)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -668,7 +662,7 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                                 innerRadius={50} outerRadius={80} paddingAngle={2}>
                                                 {invoiceStatusData.map(d => <Cell key={d.name} fill={d.color} />)}
                                             </Pie>
-                                            <RTooltip formatter={(v: number, n: string) => [`${v}`, n]} />
+                                            <RTooltip formatter={(v, n) => [`${v}`, n]} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                     <div className="space-y-2 flex-1">
@@ -698,7 +692,7 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                         margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                                         <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
                                         <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
-                                        <RTooltip formatter={(v: number) => [`${v}`, 'Élèves']} />
+                                        <RTooltip formatter={(v) => [`${v}`, 'Élèves']} />
                                         <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
