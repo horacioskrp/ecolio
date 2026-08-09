@@ -12,10 +12,24 @@ use Inertia\Response;
 
 class SalaryComponentController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $perPage = in_array((int) $request->per_page, [10, 25, 50, 100], true) ? (int) $request->per_page : 25;
+
+        $components = SalaryComponent::query()
+            ->when($request->search, function ($q) use ($request) {
+                $term = '%' . $request->search . '%';
+                $q->where(fn ($s) => $s->where('name', 'like', $term)->orWhere('code', 'like', $term));
+            })
+            ->when(in_array($request->type, ['earning', 'deduction'], true), fn ($q) => $q->where('type', $request->type))
+            ->orderBy('type')->orderBy('sort_order')->orderBy('name')
+            ->paginate($perPage)
+            ->withQueryString();
+
         return Inertia::render('Rh/SalaryComponents/Index', [
-            'components' => SalaryComponent::orderBy('type')->orderBy('sort_order')->orderBy('name')->get(),
+            'components' => $components,
+            'perPage'    => $perPage,
+            'filters'    => $request->only(['search', 'type']),
         ]);
     }
 
