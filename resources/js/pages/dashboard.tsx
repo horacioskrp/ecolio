@@ -341,49 +341,6 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                     </div>
                 )}
 
-                {/* ── KPIs financiers (facturation + synthèse du mois) ─────── */}
-                {isFinancial && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <KpiCard
-                            title="Total facturé"
-                            value={fmt(Number(stats?.total_amount ?? 0))}
-                            sub={`${stats?.total_invoices ?? 0} factures`}
-                            icon={Banknote}
-                            color="blue"
-                        />
-                        <KpiCard
-                            title="Encaissé"
-                            value={fmt(Number(stats?.total_paid ?? 0))}
-                            sub={`Taux ${collectedPct}%`}
-                            icon={CheckCircle2}
-                            color="green"
-                        />
-                        <KpiCard
-                            title="Reste à recouvrer"
-                            value={fmt(Number(stats?.total_remaining ?? 0))}
-                            sub={`${(stats?.issued_count ?? 0) + (stats?.partial_count ?? 0)} dossiers ouverts`}
-                            icon={AlertCircle}
-                            color="orange"
-                        />
-                        <KpiCard
-                            title="Soldés / Impayés"
-                            value={`${stats?.paid_count ?? 0} / ${stats?.issued_count ?? 0}`}
-                            sub={`${stats?.partial_count ?? 0} paiements partiels`}
-                            icon={XCircle}
-                            color="red"
-                        />
-                        <KpiCard title="Encaissé (mois)" value={fmt(financial.month.income)} sub="Ce mois-ci" icon={TrendingUp} color="green" />
-                        <KpiCard title="Dépenses (mois)" value={fmt(financial.month.expenses)} sub="Ce mois-ci" icon={TrendingDown} color="red" />
-                        <KpiCard
-                            title="Solde net (mois)"
-                            value={fmt(financial.month.net)}
-                            sub={financial.month.net >= 0 ? 'Excédent' : 'Déficit'}
-                            icon={Wallet}
-                            color={financial.month.net >= 0 ? 'blue' : 'orange'}
-                        />
-                    </div>
-                )}
-
                 {/* ── KPIs inscriptions ─────────────────────────────────── */}
                 {isEnrollment && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -485,6 +442,49 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                             sub={`${academic.exam_registrations} inscription${academic.exam_registrations > 1 ? 's' : ''}`}
                             icon={GraduationCap}
                             color="blue"
+                        />
+                    </div>
+                )}
+
+                {/* ── KPIs financiers (facturation + synthèse du mois) ─────── */}
+                {isFinancial && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <KpiCard
+                            title="Total facturé"
+                            value={fmt(Number(stats?.total_amount ?? 0))}
+                            sub={`${stats?.total_invoices ?? 0} factures`}
+                            icon={Banknote}
+                            color="blue"
+                        />
+                        <KpiCard
+                            title="Encaissé"
+                            value={fmt(Number(stats?.total_paid ?? 0))}
+                            sub={`Taux ${collectedPct}%`}
+                            icon={CheckCircle2}
+                            color="green"
+                        />
+                        <KpiCard
+                            title="Reste à recouvrer"
+                            value={fmt(Number(stats?.total_remaining ?? 0))}
+                            sub={`${(stats?.issued_count ?? 0) + (stats?.partial_count ?? 0)} dossiers ouverts`}
+                            icon={AlertCircle}
+                            color="orange"
+                        />
+                        <KpiCard
+                            title="Soldés / Impayés"
+                            value={`${stats?.paid_count ?? 0} / ${stats?.issued_count ?? 0}`}
+                            sub={`${stats?.partial_count ?? 0} paiements partiels`}
+                            icon={XCircle}
+                            color="red"
+                        />
+                        <KpiCard title="Encaissé (mois)" value={fmt(financial.month.income)} sub="Ce mois-ci" icon={TrendingUp} color="green" />
+                        <KpiCard title="Dépenses (mois)" value={fmt(financial.month.expenses)} sub="Ce mois-ci" icon={TrendingDown} color="red" />
+                        <KpiCard
+                            title="Solde net (mois)"
+                            value={fmt(financial.month.net)}
+                            sub={financial.month.net >= 0 ? 'Excédent' : 'Déficit'}
+                            icon={Wallet}
+                            color={financial.month.net >= 0 ? 'blue' : 'orange'}
                         />
                     </div>
                 )}
