@@ -215,7 +215,7 @@ Un visualiseur **Redoc** est exposé sur **`/docs/api`**, mais **gardé par l'en
 ### 1. Cloner le projet
 
 ```bash
-git clone https://github.com/horacioskrp/dalibi.git
+git clone https://github.com/wearedalibi/dalibi.git
 cd dalibi
 ```
 
@@ -530,8 +530,10 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## 👨‍💻 Développé par
 
-**Horacio Skrp** — [GitHub](https://github.com/horacioskrp)
+**Dalibi** est un projet open-source de l'organisation [wearedalibi](https://github.com/wearedalibi).
+
+Créé et maintenu par **Horacio Skrp** — [GitHub](https://github.com/horacioskrp).
 
 ---
 
-**Note** : Ce logiciel est en développement actif. Signalez les bugs via les [GitHub Issues](https://github.com/horacioskrp/dalibi/issues).
+**Note** : Ce logiciel est en développement actif. Signalez les bugs via les [GitHub Issues](https://github.com/wearedalibi/dalibi/issues).
