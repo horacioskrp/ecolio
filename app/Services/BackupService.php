@@ -268,7 +268,7 @@ class BackupService
      *
      * @return array{format:string, tables:int, rows?:int}
      */
-    public function restore(UploadedFile $file): array
+    public function restore(UploadedFile $file, ?string $onlyTable = null): array
     {
         $name = strtolower($file->getClientOriginalName());
         $real = (string) $file->getRealPath();
@@ -280,18 +280,33 @@ class BackupService
             // On n'empêche pas la restauration si le snapshot échoue
         }
 
-        // Archive complète (base + médias)
+        // Archive complète (base + médias) — restauration globale uniquement.
         if (str_ends_with($name, '.zip')) {
+            if ($onlyTable !== null) {
+                throw new \InvalidArgumentException('La restauration sélective par table est disponible uniquement au format JSON.');
+            }
+
             return $this->restoreZip($real);
         }
 
-        return $this->restoreDbFile($real, $name);
+        return $this->restoreDbFile($real, $name, $onlyTable);
+    }
+
+    /** Liste des tables restaurables (pour la restauration sélective). */
+    public function restorableTables(): array
+    {
+        return $this->tables();
     }
 
     /** Restaure la base depuis un fichier de dump (json[.gz], sql[.gz] ou dump PostgreSQL). */
-    private function restoreDbFile(string $path, string $name): array
+    private function restoreDbFile(string $path, string $name, ?string $onlyTable = null): array
     {
         $name = strtolower($name);
+
+        // La restauration sélective n'est possible qu'avec l'export JSON portable.
+        if ($onlyTable !== null && ! (str_ends_with($name, '.json') || str_ends_with($name, '.json.gz'))) {
+            throw new \InvalidArgumentException('La restauration sélective par table est disponible uniquement au format JSON.');
+        }
 
         // Dump natif PostgreSQL (format custom)
         if (str_ends_with($name, '.dump') || str_ends_with($name, '.pgdump')) {
@@ -319,7 +334,7 @@ class BackupService
         try {
             $contents = (string) file_get_contents($source);
 
-            return $ext === 'sql' ? $this->restoreSql($contents) : $this->restoreJson($contents);
+            return $ext === 'sql' ? $this->restoreSql($contents) : $this->restoreJson($contents, $onlyTable);
         } finally {
             if ($tmp && is_file($tmp)) {
                 @unlink($tmp);
@@ -410,13 +425,31 @@ class BackupService
         @rmdir($dir);
     }
 
-    /** Restaure depuis un export JSON (vide puis réinsère chaque table). */
-    private function restoreJson(string $contents): array
+    /**
+     * Restaure depuis un export JSON (vide puis réinsère chaque table).
+     *
+     * @param  string|null  $onlyTable  restaure une seule table (restauration ciblée)
+     */
+    private function restoreJson(string $contents, ?string $onlyTable = null): array
     {
         $data = json_decode($contents, true);
 
         if (! is_array($data) || ! isset($data['tables']) || ! is_array($data['tables'])) {
             throw new \RuntimeException('Fichier JSON de sauvegarde invalide.');
+        }
+
+        // Restauration ciblée : une seule table, par lots bornés (pas de transaction géante).
+        if ($onlyTable !== null) {
+            if (! array_key_exists($onlyTable, $data['tables'])) {
+                throw new \RuntimeException("La table « {$onlyTable} » est absente de cette sauvegarde.");
+            }
+            if (! Schema::hasTable($onlyTable)) {
+                throw new \RuntimeException("La table « {$onlyTable} » n'existe pas dans la base.");
+            }
+
+            $rows = $this->restoreTableBatched($onlyTable, $data['tables'][$onlyTable]);
+
+            return ['format' => 'json', 'tables' => 1, 'rows' => $rows];
         }
 
         $rowsTotal = 0;
@@ -444,6 +477,32 @@ class BackupService
         }
 
         return ['format' => 'json', 'tables' => count($data['tables']), 'rows' => $rowsTotal];
+    }
+
+    /**
+     * Restaure une seule table par lots (une transaction par lot d'insertion),
+     * en désactivant les clés étrangères le temps de l'opération. Évite la
+     * transaction unique géante sur les tables volumineuses.
+     */
+    private function restoreTableBatched(string $table, array $rows): int
+    {
+        $this->disableForeignKeys();
+
+        try {
+            DB::table($table)->delete();
+
+            $total = 0;
+            foreach (array_chunk($rows, 500) as $chunk) {
+                if (! empty($chunk)) {
+                    DB::transaction(fn () => DB::table($table)->insert($chunk));
+                    $total += count($chunk);
+                }
+            }
+
+            return $total;
+        } finally {
+            $this->enableForeignKeys();
+        }
     }
 
     /** Restaure depuis un export SQL (vide les tables visées puis rejoue le script). */
@@ -562,6 +621,35 @@ class BackupService
             }
         } catch (\Throwable) {
             // Messagerie non configurée : on n'empêche pas le flux de sauvegarde.
+        }
+    }
+
+    /** Désactive les clés étrangères hors transaction (restauration ciblée par lots). */
+    private function disableForeignKeys(): void
+    {
+        try {
+            match (DB::getDriverName()) {
+                'sqlite' => DB::statement('PRAGMA foreign_keys = OFF'),
+                'mysql'  => DB::statement('SET FOREIGN_KEY_CHECKS=0'),
+                'pgsql'  => DB::statement("SET session_replication_role = 'replica'"),
+                default  => null,
+            };
+        } catch (\Throwable) {
+            // Best effort selon les privilèges du compte SGBD
+        }
+    }
+
+    private function enableForeignKeys(): void
+    {
+        try {
+            match (DB::getDriverName()) {
+                'sqlite' => DB::statement('PRAGMA foreign_keys = ON'),
+                'mysql'  => DB::statement('SET FOREIGN_KEY_CHECKS=1'),
+                'pgsql'  => DB::statement("SET session_replication_role = 'origin'"),
+                default  => null,
+            };
+        } catch (\Throwable) {
+            // Best effort
         }
     }
 

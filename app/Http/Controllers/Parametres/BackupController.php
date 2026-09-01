@@ -64,6 +64,7 @@ class BackupController extends Controller
                     'archived' => Backup::where('academic_year_id', $y->id)
                         ->where('locked', true)->where('status', 'completed')->exists(),
                 ]),
+            'tables'         => $this->service->restorableTables(),
         ]);
     }
 
@@ -115,8 +116,9 @@ class BackupController extends Controller
     {
         $this->authorizeAdmin($request);
 
-        $request->validate([
-            'file' => ['required', 'file', 'max:204800'], // 200 Mo
+        $validated = $request->validate([
+            'file'       => ['required', 'file', 'max:204800'], // 200 Mo
+            'only_table' => ['nullable', 'string', 'max:255'],
         ], [
             'file.required' => 'Sélectionnez un fichier de sauvegarde.',
             'file.max'      => 'Le fichier ne doit pas dépasser 200 Mo.',
@@ -127,17 +129,26 @@ class BackupController extends Controller
             return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json, .sql, .gz, .dump ou .zip.']);
         }
 
+        $onlyTable = $validated['only_table'] ?? null;
+        if ($onlyTable !== null && ! in_array($onlyTable, $this->service->restorableTables(), true)) {
+            return back()->withErrors(['only_table' => 'Table cible invalide.']);
+        }
+
         try {
-            $result = $this->service->restore($request->file('file'));
+            $result = $this->service->restore($request->file('file'), $onlyTable);
         } catch (\Throwable $e) {
             return back()->with('error', 'Échec de la restauration : ' . $e->getMessage());
         }
 
         $detail = isset($result['rows'])
-            ? "{$result['tables']} tables, {$result['rows']} lignes"
-            : "{$result['tables']} tables";
+            ? "{$result['tables']} table(s), {$result['rows']} lignes"
+            : "{$result['tables']} table(s)";
+        if (isset($result['media'])) {
+            $detail .= ", {$result['media']} fichier(s) média";
+        }
+        $scope = $onlyTable ? " de la table « {$onlyTable} »" : '';
 
-        return back()->with('success', "Restauration effectuée ({$detail}). Une sauvegarde de sécurité a été créée au préalable.");
+        return back()->with('success', "Restauration{$scope} effectuée ({$detail}). Une sauvegarde de sécurité a été créée au préalable.");
     }
 
     public function verify(Request $request, Backup $backup): RedirectResponse

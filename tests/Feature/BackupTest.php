@@ -148,7 +148,7 @@ class BackupTest extends TestCase
     {
         $this->actingAs($this->admin())
             ->post(route('backups.restore'), [
-                'file' => UploadedFile::fake()->create('archive.zip', 10),
+                'file' => UploadedFile::fake()->create('archive.rar', 10),
             ])
             ->assertSessionHasErrors('file');
     }
@@ -247,6 +247,50 @@ class BackupTest extends TestCase
 
         $this->assertSame('failed', Backup::firstOrFail()->status);
         Notification::assertSentTo($admin, BackupFailedNotification::class);
+    }
+
+    public function test_selective_restore_only_affects_target_table(): void
+    {
+        $year = $this->academicYear('2024-2025');
+
+        // Sauvegarde JSON complète de l'état courant
+        $this->actingAs($this->admin())->post(route('backups.store'), ['formats' => ['json']]);
+        $gz = Storage::disk('media')->get(Backup::where('format', 'json')->firstOrFail()->path);
+
+        // On modifie la table cible et on ajoute une donnée dans une autre table
+        $year->update(['year' => '9999-0000']);
+        User::factory()->create(['firstname' => 'ApresSauvegarde']);
+
+        // Restauration ciblée : uniquement « academic_years »
+        app(BackupService::class)->restore(
+            UploadedFile::fake()->createWithContent('export.json.gz', $gz),
+            'academic_years'
+        );
+
+        // La table cible est revenue à l'état sauvegardé…
+        $this->assertDatabaseHas('academic_years', ['id' => $year->id, 'year' => '2024-2025']);
+        // … mais les autres tables ne sont pas touchées
+        $this->assertDatabaseHas('users', ['firstname' => 'ApresSauvegarde']);
+    }
+
+    public function test_selective_restore_rejects_non_json_format(): void
+    {
+        $this->actingAs($this->admin())
+            ->post(route('backups.restore'), [
+                'file'       => UploadedFile::fake()->createWithContent('dump.sql', '-- vide'),
+                'only_table' => 'users',
+            ])
+            ->assertSessionHas('error');
+    }
+
+    public function test_selective_restore_rejects_unknown_table(): void
+    {
+        $this->actingAs($this->admin())
+            ->post(route('backups.restore'), [
+                'file'       => UploadedFile::fake()->createWithContent('d.json', '{"tables":{}}'),
+                'only_table' => 'table_inexistante',
+            ])
+            ->assertSessionHasErrors('only_table');
     }
 
     public function test_backup_with_media_produces_a_zip_bundle(): void

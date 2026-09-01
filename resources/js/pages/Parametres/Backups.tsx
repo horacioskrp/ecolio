@@ -25,7 +25,9 @@ interface BackupRow {
 }
 interface AcademicYearRow { id: string; year: string; archived: boolean; }
 interface Settings { frequency: string; time: string; day_of_week: string; formats: string; retention: string; }
-interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; academicYears: AcademicYearRow[]; }
+interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; academicYears: AcademicYearRow[]; tables: string[]; }
+
+const ALL_TABLES = '__all__';
 
 const DAYS = [
     { v: '1', l: 'Lundi' }, { v: '2', l: 'Mardi' }, { v: '3', l: 'Mercredi' },
@@ -34,8 +36,9 @@ const DAYS = [
 
 const fmtSize = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
 
-export default function Backups({ backups, settings, storageDriver, academicYears }: Readonly<Props>) {
+export default function Backups({ backups, settings, storageDriver, academicYears, tables }: Readonly<Props>) {
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [restoreTable, setRestoreTable] = useState<string>(ALL_TABLES);
     const [runFormats, setRunFormats] = useState<string[]>(['json', 'sql']);
     const [withMedia, setWithMedia] = useState(false);
     const [running, setRunning] = useState(false);
@@ -60,7 +63,10 @@ export default function Backups({ backups, settings, storageDriver, academicYear
     const runRestore = () => {
         if (!restoreFile) return;
         setRestoring(true);
-        router.post(route('backups.restore'), { file: restoreFile }, {
+        router.post(route('backups.restore'), {
+            file: restoreFile,
+            only_table: restoreTable === ALL_TABLES ? null : restoreTable,
+        }, {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => { setRestoreFile(null); if (restoreInputRef.current) restoreInputRef.current.value = ''; },
@@ -263,7 +269,20 @@ export default function Backups({ backups, settings, storageDriver, academicYear
                             <Upload className="w-4 h-4" /> {restoring ? 'Restauration…' : 'Restaurer'}
                         </Button>
                     </div>
-                    <p className="text-xs text-gray-400">Formats acceptés : .json, .sql, .gz (compressé) ou .dump (PostgreSQL) issus de cette application — max 200 Mo.</p>
+                    <div className="space-y-1.5 max-w-md">
+                        <label className="text-sm font-medium text-gray-700">Restaurer une seule table (optionnel)</label>
+                        <Select value={restoreTable} onValueChange={setRestoreTable}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL_TABLES}>Toute la base</SelectItem>
+                                {tables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-400">
+                            La restauration ciblée par table n'est disponible qu'avec les fichiers <strong>.json</strong> (ou .json.gz) et n'écrase que la table choisie.
+                        </p>
+                    </div>
+                    <p className="text-xs text-gray-400">Formats acceptés : .json, .sql, .gz (compressé), .dump (PostgreSQL) ou .zip (base + médias) issus de cette application — max 200 Mo.</p>
                 </div>
 
                 {/* Historique */}
