@@ -1,7 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
-    AlertCircle, AlertTriangle, CheckCircle2, Clock, Cloud, Database, DatabaseBackup,
-    Download, HardDrive, Play, Trash2, Upload,
+    AlertCircle, AlertTriangle, Archive, CheckCircle2, Clock, Cloud, Database, DatabaseBackup,
+    Download, HardDrive, Lock, Play, ShieldCheck, Trash2, Upload,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
@@ -19,10 +19,15 @@ import AppLayout from '@/layouts/app-layout';
 interface BackupRow {
     id: string; filename: string; format: string; disk: string; size: number;
     status: string; error: string | null; scheduled: boolean;
+    locked?: boolean; label?: string | null;
+    includes_media?: boolean; checksum?: string | null;
     created_by: string | null; created_at: string | null;
 }
+interface AcademicYearRow { id: string; year: string; archived: boolean; }
 interface Settings { frequency: string; time: string; day_of_week: string; formats: string; retention: string; }
-interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; }
+interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; academicYears: AcademicYearRow[]; tables: string[]; }
+
+const ALL_TABLES = '__all__';
 
 const DAYS = [
     { v: '1', l: 'Lundi' }, { v: '2', l: 'Mardi' }, { v: '3', l: 'Mercredi' },
@@ -31,10 +36,24 @@ const DAYS = [
 
 const fmtSize = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
 
-export default function Backups({ backups, settings, storageDriver }: Readonly<Props>) {
+export default function Backups({ backups, settings, storageDriver, academicYears, tables }: Readonly<Props>) {
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [restoreTable, setRestoreTable] = useState<string>(ALL_TABLES);
     const [runFormats, setRunFormats] = useState<string[]>(['json', 'sql']);
+    const [withMedia, setWithMedia] = useState(false);
     const [running, setRunning] = useState(false);
+
+    const [archiveYear, setArchiveYear] = useState<string>('');
+    const [archiving, setArchiving] = useState(false);
+    const runArchive = () => {
+        if (!archiveYear) return;
+        setArchiving(true);
+        router.post(route('backups.archive'), { academic_year_id: archiveYear }, {
+            preserveScroll: true,
+            onSuccess: () => setArchiveYear(''),
+            onFinish: () => setArchiving(false),
+        });
+    };
 
     const restoreInputRef = useRef<HTMLInputElement>(null);
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
@@ -44,7 +63,10 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
     const runRestore = () => {
         if (!restoreFile) return;
         setRestoring(true);
-        router.post(route('backups.restore'), { file: restoreFile }, {
+        router.post(route('backups.restore'), {
+            file: restoreFile,
+            only_table: restoreTable === ALL_TABLES ? null : restoreTable,
+        }, {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => { setRestoreFile(null); if (restoreInputRef.current) restoreInputRef.current.value = ''; },
@@ -58,7 +80,7 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
     const runNow = () => {
         if (runFormats.length === 0) return;
         setRunning(true);
-        router.post(route('backups.store'), { formats: runFormats }, {
+        router.post(route('backups.store'), { formats: runFormats, with_media: withMedia }, {
             preserveScroll: true,
             onFinish: () => setRunning(false),
         });
@@ -82,7 +104,7 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
     return (
         <AppLayout>
             <Head title="Sauvegardes" />
-            <div className="w-full max-w-5xl mx-auto space-y-6">
+            <div className="w-full space-y-6">
 
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
@@ -120,8 +142,44 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                                 </label>
                             ))}
                         </div>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox checked={withMedia} onCheckedChange={() => setWithMedia(v => !v)} />
+                            <span className="font-medium text-gray-700">Inclure les médias (documents, photos)</span>
+                        </label>
                         <Button onClick={runNow} disabled={running || runFormats.length === 0} className="bg-blue-600 hover:bg-blue-700 gap-2">
                             <Database className="w-4 h-4" /> {running ? 'Sauvegarde…' : 'Lancer la sauvegarde'}
+                        </Button>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-400">
+                        Avec les médias, la sauvegarde est produite au format <strong>.zip</strong> (base + fichiers uploadés). Sinon, seule la base est sauvegardée.
+                    </p>
+                </div>
+
+                {/* Archive d'année scolaire */}
+                <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 p-5">
+                    <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-1">
+                        <Archive className="w-4 h-4 text-cyan-600" /> Archiver une année scolaire
+                    </h2>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Génère un instantané complet <strong>verrouillé</strong> et conservé à long terme (exclu de la rétention automatique).
+                        L'archive est aussi créée automatiquement à la clôture d'une année.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-1.5 min-w-56">
+                            <label className="text-sm font-medium text-gray-700">Année scolaire</label>
+                            <Select value={archiveYear} onValueChange={setArchiveYear}>
+                                <SelectTrigger><SelectValue placeholder="Choisir une année…" /></SelectTrigger>
+                                <SelectContent>
+                                    {academicYears.map(y => (
+                                        <SelectItem key={y.id} value={y.id} disabled={y.archived}>
+                                            {y.year}{y.archived ? ' — déjà archivée' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={runArchive} disabled={archiving || !archiveYear} className="bg-cyan-600 hover:bg-cyan-700 gap-2">
+                            <Archive className="w-4 h-4" /> {archiving ? 'Archivage…' : "Archiver l'année"}
                         </Button>
                     </div>
                 </div>
@@ -199,7 +257,7 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                         <input
                             ref={restoreInputRef}
                             type="file"
-                            accept=".json,.sql,.gz,.dump"
+                            accept=".json,.sql,.gz,.dump,.zip"
                             onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
                             className="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-red-50 file:px-3 file:py-1.5 file:text-red-700 file:text-sm hover:file:bg-red-100"
                         />
@@ -211,7 +269,20 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                             <Upload className="w-4 h-4" /> {restoring ? 'Restauration…' : 'Restaurer'}
                         </Button>
                     </div>
-                    <p className="text-xs text-gray-400">Formats acceptés : .json, .sql, .gz (compressé) ou .dump (PostgreSQL) issus de cette application — max 200 Mo.</p>
+                    <div className="space-y-1.5 max-w-md">
+                        <label className="text-sm font-medium text-gray-700">Restaurer une seule table (optionnel)</label>
+                        <Select value={restoreTable} onValueChange={setRestoreTable}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={ALL_TABLES}>Toute la base</SelectItem>
+                                {tables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-400">
+                            La restauration ciblée par table n'est disponible qu'avec les fichiers <strong>.json</strong> (ou .json.gz) et n'écrase que la table choisie.
+                        </p>
+                    </div>
+                    <p className="text-xs text-gray-400">Formats acceptés : .json, .sql, .gz (compressé), .dump (PostgreSQL) ou .zip (base + médias) issus de cette application — max 200 Mo.</p>
                 </div>
 
                 {/* Historique */}
@@ -234,7 +305,19 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                                 <TableRow><TableCell colSpan={7} className="py-12 text-center text-gray-400">Aucune sauvegarde pour le moment.</TableCell></TableRow>
                             ) : backups.map(b => (
                                 <TableRow key={b.id} className="hover:bg-gray-50">
-                                    <TableCell className="font-mono text-xs text-gray-700">{b.filename}</TableCell>
+                                    <TableCell className="font-mono text-xs text-gray-700">
+                                        {b.filename}
+                                        {b.locked && (
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 font-sans text-[11px] font-medium text-cyan-700 ring-1 ring-cyan-100">
+                                                <Lock className="w-3 h-3" /> {b.label ?? 'Archive'}
+                                            </span>
+                                        )}
+                                        {b.includes_media && (
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 font-sans text-[11px] font-medium text-violet-700 ring-1 ring-violet-100">
+                                                <Archive className="w-3 h-3" /> + médias
+                                            </span>
+                                        )}
+                                    </TableCell>
                                     <TableCell><span className="text-xs font-bold uppercase text-blue-600">{b.format}</span></TableCell>
                                     <TableCell className="text-sm text-gray-600">{b.status === 'completed' ? fmtSize(b.size) : '—'}</TableCell>
                                     <TableCell className="text-xs text-gray-500">{b.scheduled ? 'Planifiée' : (b.created_by ?? 'Manuelle')}</TableCell>
@@ -252,6 +335,13 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                                                 <a href={route('backups.download', b.id)}>
                                                     <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="w-3.5 h-3.5" /></Button>
                                                 </a>
+                                            )}
+                                            {b.status === 'completed' && b.checksum && (
+                                                <Button variant="outline" size="sm" className="text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                                    title="Vérifier l'intégrité"
+                                                    onClick={() => router.post(route('backups.verify', b.id), {}, { preserveScroll: true })}>
+                                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                                </Button>
                                             )}
                                             <Button variant="outline" size="sm" className="border-red-200 text-red-500 hover:bg-red-50" onClick={() => setDeleteId(b.id)}>
                                                 <Trash2 className="w-3.5 h-3.5" />

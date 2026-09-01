@@ -303,9 +303,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Sauvegardes de la base de données
     Route::get('settings/backups', [\App\Http\Controllers\Parametres\BackupController::class, 'index'])->middleware('can:view_backups')->name('backups.index');
     Route::post('settings/backups', [\App\Http\Controllers\Parametres\BackupController::class, 'store'])->middleware('can:create_backups')->name('backups.store');
+    Route::post('settings/backups/archive', [\App\Http\Controllers\Parametres\BackupController::class, 'archive'])->middleware('can:create_backups')->name('backups.archive');
     Route::post('settings/backups/schedule', [\App\Http\Controllers\Parametres\BackupController::class, 'updateSchedule'])->middleware('can:create_backups')->name('backups.schedule');
     Route::post('settings/backups/restore', [\App\Http\Controllers\Parametres\BackupController::class, 'restore'])->middleware('can:restore_backups')->name('backups.restore');
     Route::get('settings/backups/{backup}/download', [\App\Http\Controllers\Parametres\BackupController::class, 'download'])->middleware('can:view_backups')->name('backups.download');
+    Route::post('settings/backups/{backup}/verify', [\App\Http\Controllers\Parametres\BackupController::class, 'verify'])->middleware('can:view_backups')->name('backups.verify');
     Route::delete('settings/backups/{backup}', [\App\Http\Controllers\Parametres\BackupController::class, 'destroy'])->middleware('can:delete_backups')->name('backups.destroy');
 
     // Passage de classe / réinscription en masse
