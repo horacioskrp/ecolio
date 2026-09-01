@@ -78,15 +78,15 @@ class BackupController extends Controller
         $this->authorizeAdmin($request);
 
         $request->validate([
-            'file' => ['required', 'file', 'max:51200'], // 50 Mo
+            'file' => ['required', 'file', 'max:204800'], // 200 Mo
         ], [
             'file.required' => 'Sélectionnez un fichier de sauvegarde.',
-            'file.max'      => 'Le fichier ne doit pas dépasser 50 Mo.',
+            'file.max'      => 'Le fichier ne doit pas dépasser 200 Mo.',
         ]);
 
         $ext = strtolower($request->file('file')->getClientOriginalExtension());
-        if (! in_array($ext, ['json', 'sql'], true)) {
-            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json ou .sql.']);
+        if (! in_array($ext, ['json', 'sql', 'gz', 'dump'], true)) {
+            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json, .sql, .gz ou .dump.']);
         }
 
         try {

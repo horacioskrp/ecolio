@@ -11,7 +11,17 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Process;
 
+/**
+ * Génère et restaure les sauvegardes de la base.
+ *
+ * Conçu pour tenir la charge sur plusieurs années de données :
+ *  - écriture en flux (jamais toute la base en mémoire) ;
+ *  - compression gzip systématique (~85 % de taille en moins) ;
+ *  - sur PostgreSQL, délégation à `pg_dump` (format custom, schéma inclus),
+ *    avec repli automatique sur l'export SQL portable si l'outil est absent.
+ */
 class BackupService
 {
     /** Tables transitoires exclues des sauvegardes. */
@@ -21,6 +31,9 @@ class BackupService
     ];
 
     private const DIRECTORY = 'backups';
+
+    /** Temps max (s) accordé aux outils externes (pg_dump / pg_restore). */
+    private const PROCESS_TIMEOUT = 900;
 
     /**
      * Génère une sauvegarde pour chaque format demandé.
@@ -38,17 +51,27 @@ class BackupService
             $timestamp = now()->format('Y-m-d_His');
             $filename  = "backup_{$timestamp}.{$format}";
             $path      = self::DIRECTORY . '/' . $filename;
+            $tmp       = tempnam(sys_get_temp_dir(), 'bkp_');
 
             try {
-                $content = $format === 'sql' ? $this->buildSql() : $this->buildJson();
-                Storage::disk($disk)->put($path, $content);
+                // Le builder écrit dans $tmp et renvoie l'extension réellement produite.
+                $extension = $this->writeDump($format, $tmp);
+                $filename  = "backup_{$timestamp}.{$extension}";
+                $path      = self::DIRECTORY . '/' . $filename;
+                $size      = filesize($tmp) ?: 0;
+
+                $stream = fopen($tmp, 'rb');
+                Storage::disk($disk)->writeStream($path, $stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
 
                 $results->push(Backup::create([
                     'filename'   => $filename,
                     'path'       => $path,
                     'disk'       => $this->driverName(),
                     'format'     => $format,
-                    'size'       => strlen($content),
+                    'size'       => $size,
                     'status'     => 'completed',
                     'scheduled'  => $scheduled,
                     'created_by' => $userId,
@@ -64,6 +87,10 @@ class BackupService
                     'scheduled'  => $scheduled,
                     'created_by' => $userId,
                 ]));
+            } finally {
+                if (is_string($tmp) && is_file($tmp)) {
+                    @unlink($tmp);
+                }
             }
         }
 
@@ -73,19 +100,44 @@ class BackupService
     }
 
     /**
-     * Restaure la base à partir d'un fichier de sauvegarde (JSON ou SQL).
-     * Une sauvegarde de sécurité (JSON) est générée au préalable.
+     * Écrit la sauvegarde du format demandé dans $tmp.
+     *
+     * @return string  extension du fichier généré (json.gz | sql.gz | dump)
+     */
+    private function writeDump(string $format, string $tmp): string
+    {
+        if ($format === 'sql') {
+            if (DB::getDriverName() === 'pgsql') {
+                try {
+                    $this->pgDump($tmp);
+
+                    return 'dump';
+                } catch (\Throwable $e) {
+                    report($e); // pg_dump indisponible : on bascule sur l'export portable
+                }
+            }
+
+            $this->writeSqlGz($tmp);
+
+            return 'sql.gz';
+        }
+
+        $this->writeJsonGz($tmp);
+
+        return 'json.gz';
+    }
+
+    /**
+     * Restaure la base à partir d'un fichier de sauvegarde
+     * (json[.gz], sql[.gz] ou dump PostgreSQL). Une sauvegarde de sécurité
+     * (JSON) est générée au préalable.
      *
      * @return array{format:string, tables:int, rows?:int}
      */
     public function restore(UploadedFile $file): array
     {
-        $ext      = strtolower($file->getClientOriginalExtension());
-        $contents = (string) file_get_contents($file->getRealPath());
-
-        if (! in_array($ext, ['json', 'sql'], true)) {
-            throw new \InvalidArgumentException('Format non supporté (JSON ou SQL attendu).');
-        }
+        $name = strtolower($file->getClientOriginalName());
+        $real = (string) $file->getRealPath();
 
         // Filet de sécurité : snapshot avant écrasement
         try {
@@ -94,7 +146,38 @@ class BackupService
             // On n'empêche pas la restauration si le snapshot échoue
         }
 
-        return $ext === 'sql' ? $this->restoreSql($contents) : $this->restoreJson($contents);
+        // Dump natif PostgreSQL (format custom)
+        if (str_ends_with($name, '.dump') || str_ends_with($name, '.pgdump')) {
+            return $this->restorePgDump($real);
+        }
+
+        // Fichier compressé : on décompresse dans un fichier temporaire
+        $source = $real;
+        $tmp    = null;
+        if (str_ends_with($name, '.gz')) {
+            $tmp = tempnam(sys_get_temp_dir(), 'rst_');
+            $this->gunzip($real, $tmp);
+            $source = $tmp;
+            $name   = substr($name, 0, -3); // retire « .gz »
+        }
+
+        $ext = pathinfo($name, PATHINFO_EXTENSION);
+        if (! in_array($ext, ['json', 'sql'], true)) {
+            if ($tmp) {
+                @unlink($tmp);
+            }
+            throw new \InvalidArgumentException('Format non supporté (JSON, SQL ou dump PostgreSQL attendu).');
+        }
+
+        try {
+            $contents = (string) file_get_contents($source);
+
+            return $ext === 'sql' ? $this->restoreSql($contents) : $this->restoreJson($contents);
+        } finally {
+            if ($tmp && is_file($tmp)) {
+                @unlink($tmp);
+            }
+        }
     }
 
     /** Restaure depuis un export JSON (vide puis réinsère chaque table). */
@@ -158,6 +241,30 @@ class BackupService
         return ['format' => 'sql', 'tables' => count($tables)];
     }
 
+    /** Restaure un dump natif PostgreSQL via `pg_restore` (drop + recreate). */
+    private function restorePgDump(string $dumpPath): array
+    {
+        $c = $this->pgConnection();
+
+        $process = new Process([
+            'pg_restore',
+            '--clean', '--if-exists', '--no-owner', '--no-privileges',
+            '-h', $c['host'], '-p', (string) $c['port'],
+            '-U', $c['username'], '-d', $c['database'],
+            $dumpPath,
+        ], null, ['PGPASSWORD' => $c['password']], null, self::PROCESS_TIMEOUT);
+
+        $process->run();
+
+        // pg_restore peut émettre des avertissements non bloquants (exit 1) ;
+        // on échoue seulement sur une erreur franche (exit >= 2).
+        if ($process->getExitCode() >= 2) {
+            throw new \RuntimeException('pg_restore a échoué : ' . mb_substr($process->getErrorOutput(), 0, 500));
+        }
+
+        return ['format' => 'dump', 'tables' => 0];
+    }
+
     /** Désactive / diffère les contraintes de clés étrangères le temps de la restauration. */
     private function deferForeignKeys(): void
     {
@@ -196,52 +303,120 @@ class BackupService
         $backup->delete();
     }
 
-    /** Export JSON de toutes les tables. */
-    private function buildJson(): string
+    /**
+     * Export JSON gzippé, écrit en flux (une ligne chargée à la fois).
+     * Structure identique à l'ancien format : {generated_at, driver, tables:{...}}.
+     */
+    private function writeJsonGz(string $tmp): void
     {
-        $payload = [
-            'generated_at' => now()->toIso8601String(),
-            'driver'       => DB::getDriverName(),
-            'tables'       => [],
-        ];
-
-        foreach ($this->tables() as $table) {
-            $payload['tables'][$table] = DB::table($table)->get()
-                ->map(fn ($row) => (array) $row)
-                ->all();
+        $gz = gzopen($tmp, 'wb6');
+        if ($gz === false) {
+            throw new \RuntimeException('Impossible d\'ouvrir le fichier de sauvegarde temporaire.');
         }
 
-        return json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+
+        gzwrite($gz, '{"generated_at":' . json_encode(now()->toIso8601String())
+            . ',"driver":' . json_encode(DB::getDriverName())
+            . ',"tables":{');
+
+        $firstTable = true;
+        foreach ($this->tables() as $table) {
+            gzwrite($gz, ($firstTable ? '' : ',') . json_encode($table) . ':[');
+            $firstRow = true;
+            foreach (DB::table($table)->cursor() as $row) {
+                gzwrite($gz, ($firstRow ? '' : ',') . json_encode((array) $row, $flags));
+                $firstRow = false;
+            }
+            gzwrite($gz, ']');
+            $firstTable = false;
+        }
+
+        gzwrite($gz, '}}');
+        gzclose($gz);
     }
 
-    /** Export SQL (instructions INSERT, données uniquement). */
-    private function buildSql(): string
+    /** Export SQL gzippé (INSERT, données uniquement), écrit en flux. */
+    private function writeSqlGz(string $tmp): void
     {
-        $lines = [
-            '-- Sauvegarde Dalibi',
-            '-- Généré le ' . now()->toDateTimeString(),
-            '-- SGBD : ' . DB::getDriverName(),
-            '',
-        ];
-
-        foreach ($this->tables() as $table) {
-            $rows = DB::table($table)->get();
-            if ($rows->isEmpty()) {
-                continue;
-            }
-
-            $columns = array_keys((array) $rows->first());
-            $colList = implode(', ', array_map(fn ($c) => '"' . $c . '"', $columns));
-
-            $lines[] = "-- Table : {$table}";
-            foreach ($rows as $row) {
-                $values = array_map(fn ($v) => $this->quote($v), array_values((array) $row));
-                $lines[] = sprintf('INSERT INTO "%s" (%s) VALUES (%s);', $table, $colList, implode(', ', $values));
-            }
-            $lines[] = '';
+        $gz = gzopen($tmp, 'wb6');
+        if ($gz === false) {
+            throw new \RuntimeException('Impossible d\'ouvrir le fichier de sauvegarde temporaire.');
         }
 
-        return implode("\n", $lines);
+        gzwrite($gz, "-- Sauvegarde Dalibi\n");
+        gzwrite($gz, '-- Généré le ' . now()->toDateTimeString() . "\n");
+        gzwrite($gz, '-- SGBD : ' . DB::getDriverName() . "\n\n");
+
+        foreach ($this->tables() as $table) {
+            $columns = null;
+            foreach (DB::table($table)->cursor() as $row) {
+                $arr = (array) $row;
+                if ($columns === null) {
+                    $columns = array_keys($arr);
+                    $colList = implode(', ', array_map(fn ($c) => '"' . $c . '"', $columns));
+                    gzwrite($gz, "-- Table : {$table}\n");
+                }
+                $values = array_map(fn ($v) => $this->quote($v), array_values($arr));
+                gzwrite($gz, sprintf('INSERT INTO "%s" (%s) VALUES (%s);' . "\n", $table, $colList, implode(', ', $values)));
+            }
+            if ($columns !== null) {
+                gzwrite($gz, "\n");
+            }
+        }
+
+        gzclose($gz);
+    }
+
+    /** Dump natif PostgreSQL au format custom (compressé, schéma + données inclus). */
+    private function pgDump(string $tmp): void
+    {
+        $c = $this->pgConnection();
+
+        $process = new Process([
+            'pg_dump',
+            '-Fc', '-Z', '6', '--no-owner', '--no-privileges',
+            '-h', $c['host'], '-p', (string) $c['port'],
+            '-U', $c['username'], '-d', $c['database'],
+            '-f', $tmp,
+        ], null, ['PGPASSWORD' => $c['password']], null, self::PROCESS_TIMEOUT);
+
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            throw new \RuntimeException('pg_dump indisponible ou en échec : ' . mb_substr($process->getErrorOutput(), 0, 300));
+        }
+    }
+
+    /** Paramètres de connexion PostgreSQL de la connexion par défaut. */
+    private function pgConnection(): array
+    {
+        $conn = config('database.connections.' . config('database.default'));
+
+        return [
+            'host'     => $conn['host'] ?? '127.0.0.1',
+            'port'     => $conn['port'] ?? 5432,
+            'database' => $conn['database'] ?? '',
+            'username' => $conn['username'] ?? '',
+            'password' => (string) ($conn['password'] ?? ''),
+        ];
+    }
+
+    /** Décompresse un fichier .gz vers $dest, en flux. */
+    private function gunzip(string $src, string $dest): void
+    {
+        $in  = gzopen($src, 'rb');
+        $out = fopen($dest, 'wb');
+        if ($in === false || $out === false) {
+            throw new \RuntimeException('Impossible de décompresser le fichier de sauvegarde.');
+        }
+
+        while (! gzeof($in)) {
+            fwrite($out, (string) gzread($in, 262144));
+        }
+
+        gzclose($in);
+        fclose($out);
     }
 
     /** Formate une valeur pour une instruction SQL. */
