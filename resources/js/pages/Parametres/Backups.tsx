@@ -104,7 +104,7 @@ export default function Backups({ backups, settings, storageDriver, academicYear
     return (
         <AppLayout>
             <Head title="Sauvegardes" />
-            <div className="w-full max-w-5xl mx-auto space-y-6">
+            <div className="w-full space-y-6">
 
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
