@@ -148,6 +148,41 @@ class BackupTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_generated_files_are_gzip_compressed(): void
+    {
+        $this->actingAs($this->admin())->post(route('backups.store'), ['formats' => ['json']]);
+
+        $backup = Backup::where('format', 'json')->firstOrFail();
+
+        // Le nom reflète la compression et le contenu est bien du gzip valide.
+        $this->assertStringEndsWith('.json.gz', $backup->filename);
+
+        $raw = Storage::disk('media')->get($backup->path);
+        $this->assertSame("\x1f\x8b", substr($raw, 0, 2), 'Le fichier doit être compressé (en-tête gzip).');
+
+        $decoded = json_decode((string) gzdecode($raw), true);
+        $this->assertIsArray($decoded);
+        $this->assertArrayHasKey('tables', $decoded);
+    }
+
+    public function test_restore_from_gzipped_backup_roundtrip(): void
+    {
+        $u = User::factory()->create(['firstname' => 'Kossi', 'lastname' => 'Mensah']);
+
+        $this->actingAs($this->admin())->post(route('backups.store'), ['formats' => ['json']]);
+        $backup = Backup::where('format', 'json')->firstOrFail();
+        $gz     = Storage::disk('media')->get($backup->path);
+
+        $u->forceDelete();
+        $this->assertDatabaseMissing('users', ['id' => $u->id]);
+
+        app(BackupService::class)->restore(
+            UploadedFile::fake()->createWithContent('backup_restore.json.gz', $gz)
+        );
+
+        $this->assertDatabaseHas('users', ['id' => $u->id, 'firstname' => 'Kossi']);
+    }
+
     public function test_retention_keeps_only_latest_backups(): void
     {
         BackupSetting::set('retention', '3');

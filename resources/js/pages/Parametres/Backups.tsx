@@ -199,7 +199,7 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                         <input
                             ref={restoreInputRef}
                             type="file"
-                            accept=".json,.sql"
+                            accept=".json,.sql,.gz,.dump"
                             onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
                             className="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-red-50 file:px-3 file:py-1.5 file:text-red-700 file:text-sm hover:file:bg-red-100"
                         />
@@ -211,7 +211,7 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                             <Upload className="w-4 h-4" /> {restoring ? 'Restauration…' : 'Restaurer'}
                         </Button>
                     </div>
-                    <p className="text-xs text-gray-400">Formats acceptés : .json ou .sql (issus de cette application) — max 50 Mo.</p>
+                    <p className="text-xs text-gray-400">Formats acceptés : .json, .sql, .gz (compressé) ou .dump (PostgreSQL) issus de cette application — max 200 Mo.</p>
                 </div>
 
                 {/* Historique */}
