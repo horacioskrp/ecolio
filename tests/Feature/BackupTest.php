@@ -8,10 +8,12 @@ use App\Models\AcademicYear;
 use App\Models\Backup;
 use App\Models\BackupSetting;
 use App\Models\User;
+use App\Notifications\BackupFailedNotification;
 use App\Services\BackupService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -206,6 +208,45 @@ class BackupTest extends TestCase
 
         // Au plus 3 sauvegardes JSON conservées
         $this->assertLessThanOrEqual(3, Backup::where('format', 'json')->count());
+    }
+
+    public function test_backup_records_a_sha256_checksum(): void
+    {
+        $this->actingAs($this->admin())->post(route('backups.store'), ['formats' => ['json']]);
+
+        $backup = Backup::firstOrFail();
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', (string) $backup->checksum);
+    }
+
+    public function test_verify_detects_intact_and_corrupted_backup(): void
+    {
+        $this->actingAs($this->admin())->post(route('backups.store'), ['formats' => ['json']]);
+        $backup = Backup::firstOrFail();
+
+        // Fichier intègre
+        $this->actingAs($this->admin())
+            ->post(route('backups.verify', $backup))
+            ->assertSessionHas('success');
+
+        // On altère le fichier stocké → l'empreinte ne correspond plus
+        Storage::disk('media')->put($backup->path, 'donnée corrompue');
+        $this->actingAs($this->admin())
+            ->post(route('backups.verify', $backup))
+            ->assertSessionHas('error');
+    }
+
+    public function test_backup_failure_notifies_administrators(): void
+    {
+        Notification::fake();
+        $admin = $this->admin();
+
+        // Le stockage lève une exception → la sauvegarde échoue.
+        Storage::shouldReceive('disk')->andThrow(new \RuntimeException('stockage indisponible'));
+
+        app(BackupService::class)->run(['json'], $admin->id);
+
+        $this->assertSame('failed', Backup::firstOrFail()->status);
+        Notification::assertSentTo($admin, BackupFailedNotification::class);
     }
 
     public function test_admin_can_archive_academic_year(): void

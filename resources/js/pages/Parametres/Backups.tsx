@@ -1,7 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     AlertCircle, AlertTriangle, Archive, CheckCircle2, Clock, Cloud, Database, DatabaseBackup,
-    Download, HardDrive, Lock, Play, Trash2, Upload,
+    Download, HardDrive, Lock, Play, ShieldCheck, Trash2, Upload,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
@@ -20,6 +20,7 @@ interface BackupRow {
     id: string; filename: string; format: string; disk: string; size: number;
     status: string; error: string | null; scheduled: boolean;
     locked?: boolean; label?: string | null;
+    includes_media?: boolean; checksum?: string | null;
     created_by: string | null; created_at: string | null;
 }
 interface AcademicYearRow { id: string; year: string; archived: boolean; }
@@ -302,6 +303,13 @@ export default function Backups({ backups, settings, storageDriver, academicYear
                                                 <a href={route('backups.download', b.id)}>
                                                     <Button variant="outline" size="sm" className="gap-1 text-xs"><Download className="w-3.5 h-3.5" /></Button>
                                                 </a>
+                                            )}
+                                            {b.status === 'completed' && b.checksum && (
+                                                <Button variant="outline" size="sm" className="text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                                    title="Vérifier l'intégrité"
+                                                    onClick={() => router.post(route('backups.verify', b.id), {}, { preserveScroll: true })}>
+                                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                                </Button>
                                             )}
                                             <Button variant="outline" size="sm" className="border-red-200 text-red-500 hover:bg-red-50" onClick={() => setDeleteId(b.id)}>
                                                 <Trash2 className="w-3.5 h-3.5" />

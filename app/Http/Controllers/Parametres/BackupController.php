@@ -44,11 +44,13 @@ class BackupController extends Controller
                 'size'       => $b->size,
                 'status'     => $b->status,
                 'error'      => $b->error,
-                'scheduled'  => $b->scheduled,
-                'locked'     => $b->locked,
-                'label'      => $b->label,
-                'created_by' => $b->createdBy?->name,
-                'created_at' => $b->created_at?->format('d/m/Y H:i'),
+                'scheduled'      => $b->scheduled,
+                'locked'         => $b->locked,
+                'label'          => $b->label,
+                'includes_media' => $b->includes_media,
+                'checksum'       => $b->checksum ? substr($b->checksum, 0, 12) : null,
+                'created_by'     => $b->createdBy?->name,
+                'created_at'     => $b->created_at?->format('d/m/Y H:i'),
             ]);
 
         return Inertia::render('Parametres/Backups', [
@@ -135,6 +137,17 @@ class BackupController extends Controller
             : "{$result['tables']} tables";
 
         return back()->with('success', "Restauration effectuée ({$detail}). Une sauvegarde de sécurité a été créée au préalable.");
+    }
+
+    public function verify(Request $request, Backup $backup): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+
+        $result = $this->service->verify($backup);
+
+        return $result['ok']
+            ? back()->with('success', "Contrôle d'intégrité : {$result['reason']}")
+            : back()->with('error', "Contrôle d'intégrité : {$result['reason']}");
     }
 
     public function download(Request $request, Backup $backup)

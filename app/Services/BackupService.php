@@ -2,13 +2,17 @@
 
 namespace App\Services;
 
+use App\Constants\Roles;
 use App\Models\Backup;
 use App\Models\BackupSetting;
 use App\Models\FileStorageSetting;
+use App\Models\User;
+use App\Notifications\BackupFailedNotification;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
@@ -101,6 +105,7 @@ class BackupService
             $filename  = "{$prefix}_{$timestamp}.{$extension}";
             $path      = self::DIRECTORY . '/' . $filename;
             $size      = filesize($tmp) ?: 0;
+            $checksum  = hash_file('sha256', $tmp) ?: null;
 
             $stream = fopen($tmp, 'rb');
             Storage::disk($disk)->writeStream($path, $stream);
@@ -114,12 +119,13 @@ class BackupService
                 'disk'       => $this->driverName(),
                 'format'     => $format,
                 'size'       => $size,
+                'checksum'   => $checksum,
                 'status'     => 'completed',
                 'scheduled'  => $scheduled,
                 'created_by' => $userId,
             ], $extra));
         } catch (\Throwable $e) {
-            return Backup::create(array_merge([
+            $backup = Backup::create(array_merge([
                 'filename'   => $filename,
                 'path'       => $path,
                 'disk'       => $this->driverName(),
@@ -129,6 +135,10 @@ class BackupService
                 'scheduled'  => $scheduled,
                 'created_by' => $userId,
             ], $extra));
+
+            $this->notifyFailure($backup);
+
+            return $backup;
         } finally {
             if (is_string($tmp) && is_file($tmp)) {
                 @unlink($tmp);
@@ -327,6 +337,48 @@ class BackupService
             };
         } catch (\Throwable) {
             // Best effort
+        }
+    }
+
+    /**
+     * Vérifie l'intégrité d'une sauvegarde stockée en recalculant son empreinte.
+     *
+     * @return array{ok:bool, reason:string}
+     */
+    public function verify(Backup $backup): array
+    {
+        if ($backup->status !== 'completed') {
+            return ['ok' => false, 'reason' => "La sauvegarde n'est pas complète."];
+        }
+        if (! Storage::disk($this->disk())->exists($backup->path)) {
+            return ['ok' => false, 'reason' => 'Fichier introuvable sur le stockage.'];
+        }
+        if (! $backup->checksum) {
+            return ['ok' => false, 'reason' => 'Aucune empreinte enregistrée (sauvegarde antérieure).'];
+        }
+
+        $ctx    = hash_init('sha256');
+        $stream = Storage::disk($this->disk())->readStream($backup->path);
+        while (! feof($stream)) {
+            hash_update($ctx, (string) fread($stream, 262144));
+        }
+        fclose($stream);
+
+        return hash_final($ctx) === $backup->checksum
+            ? ['ok' => true, 'reason' => 'Fichier intègre (empreinte conforme).']
+            : ['ok' => false, 'reason' => 'Empreinte différente : le fichier est corrompu.'];
+    }
+
+    /** Alerte les administrateurs par e-mail en cas d'échec de sauvegarde. */
+    private function notifyFailure(Backup $backup): void
+    {
+        try {
+            $admins = User::role(Roles::ADMINISTRATOR)->whereNotNull('email')->get();
+            if ($admins->isNotEmpty()) {
+                Notification::send($admins, new BackupFailedNotification($backup));
+            }
+        } catch (\Throwable) {
+            // Messagerie non configurée : on n'empêche pas le flux de sauvegarde.
         }
     }
 
