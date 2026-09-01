@@ -1,6 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    AlertCircle, Archive, ArrowRight, BarChart3, Calendar, CalendarRange, GraduationCap,
+    AlertCircle, Archive, ArrowRight, BarChart3, Briefcase, Calendar, CalendarRange, GraduationCap,
     LayoutGrid, Lock, LogIn, LogOut, NotebookPen, Percent, ScanLine, Shield, ShieldCheck,
     UserCheck, Users, Wallet,
 } from 'lucide-react';
@@ -28,6 +28,7 @@ const modules: ModuleCard[] = [
     { title: 'Examens', description: 'Évaluations et examens officiels', icon: GraduationCap, href: route('evaluations.index'), permission: 'view_evaluations', color: 'from-indigo-500 to-blue-600' },
     { title: 'Présences', description: "Appel et suivi de l'assiduité", icon: UserCheck, href: route('attendances.index'), permission: 'view_attendances', color: 'from-emerald-500 to-teal-600' },
     { title: 'Comptabilité', description: 'Écolage, paiements et caisses', icon: Wallet, href: route('accounting.index'), permission: 'view_finances', color: 'from-amber-500 to-orange-600' },
+    { title: 'Personnel & Paie', description: 'Employés, cycles de paie et bulletins', icon: Briefcase, href: route('payroll.overview'), permission: 'view_payroll', color: 'from-cyan-500 to-sky-600' },
     { title: 'Documents & Archives', description: 'Certificats et archivage', icon: Archive, href: route('archives.index'), permission: 'view_archives', color: 'from-rose-500 to-pink-600' },
     { title: 'Statistiques', description: 'Indicateurs et pilotage', icon: BarChart3, href: route('statistics.index'), permission: 'view_statistics', color: 'from-cyan-500 to-blue-600' },
     { title: 'Calendrier', description: "Événements de l'année scolaire", icon: Calendar, href: route('calendar.index'), permission: 'view_calendar', color: 'from-fuchsia-500 to-purple-600' },
