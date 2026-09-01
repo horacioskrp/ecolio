@@ -37,6 +37,7 @@ const fmtSize = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} Mo` : 
 export default function Backups({ backups, settings, storageDriver, academicYears }: Readonly<Props>) {
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [runFormats, setRunFormats] = useState<string[]>(['json', 'sql']);
+    const [withMedia, setWithMedia] = useState(false);
     const [running, setRunning] = useState(false);
 
     const [archiveYear, setArchiveYear] = useState<string>('');
@@ -73,7 +74,7 @@ export default function Backups({ backups, settings, storageDriver, academicYear
     const runNow = () => {
         if (runFormats.length === 0) return;
         setRunning(true);
-        router.post(route('backups.store'), { formats: runFormats }, {
+        router.post(route('backups.store'), { formats: runFormats, with_media: withMedia }, {
             preserveScroll: true,
             onFinish: () => setRunning(false),
         });
@@ -135,10 +136,17 @@ export default function Backups({ backups, settings, storageDriver, academicYear
                                 </label>
                             ))}
                         </div>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox checked={withMedia} onCheckedChange={() => setWithMedia(v => !v)} />
+                            <span className="font-medium text-gray-700">Inclure les médias (documents, photos)</span>
+                        </label>
                         <Button onClick={runNow} disabled={running || runFormats.length === 0} className="bg-blue-600 hover:bg-blue-700 gap-2">
                             <Database className="w-4 h-4" /> {running ? 'Sauvegarde…' : 'Lancer la sauvegarde'}
                         </Button>
                     </div>
+                    <p className="mt-3 text-xs text-gray-400">
+                        Avec les médias, la sauvegarde est produite au format <strong>.zip</strong> (base + fichiers uploadés). Sinon, seule la base est sauvegardée.
+                    </p>
                 </div>
 
                 {/* Archive d'année scolaire */}
@@ -243,7 +251,7 @@ export default function Backups({ backups, settings, storageDriver, academicYear
                         <input
                             ref={restoreInputRef}
                             type="file"
-                            accept=".json,.sql,.gz,.dump"
+                            accept=".json,.sql,.gz,.dump,.zip"
                             onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
                             className="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-red-50 file:px-3 file:py-1.5 file:text-red-700 file:text-sm hover:file:bg-red-100"
                         />
@@ -283,6 +291,11 @@ export default function Backups({ backups, settings, storageDriver, academicYear
                                         {b.locked && (
                                             <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 font-sans text-[11px] font-medium text-cyan-700 ring-1 ring-cyan-100">
                                                 <Lock className="w-3 h-3" /> {b.label ?? 'Archive'}
+                                            </span>
+                                        )}
+                                        {b.includes_media && (
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 font-sans text-[11px] font-medium text-violet-700 ring-1 ring-violet-100">
+                                                <Archive className="w-3 h-3" /> + médias
                                             </span>
                                         )}
                                     </TableCell>

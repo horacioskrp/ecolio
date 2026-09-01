@@ -45,13 +45,13 @@ class BackupService
      * @param  array<int,string>  $formats  sous-ensemble de ['json', 'sql']
      * @return Collection<int,Backup>
      */
-    public function run(array $formats, ?string $userId = null, bool $scheduled = false): Collection
+    public function run(array $formats, ?string $userId = null, bool $scheduled = false, bool $withMedia = false): Collection
     {
         $formats = array_values(array_intersect($formats, ['json', 'sql'])) ?: ['json'];
         $results = collect();
 
         foreach ($formats as $format) {
-            $results->push($this->generate($format, 'backup', $userId, $scheduled));
+            $results->push($this->generate($format, 'backup', $userId, $scheduled, [], $withMedia));
         }
 
         $this->applyRetention();
@@ -91,38 +91,49 @@ class BackupService
      *
      * @param  array<string,mixed>  $extra  attributs additionnels (label, locked, academic_year_id…)
      */
-    private function generate(string $format, string $prefix, ?string $userId, bool $scheduled, array $extra = []): Backup
+    private function generate(string $format, string $prefix, ?string $userId, bool $scheduled, array $extra = [], bool $withMedia = false): Backup
     {
         $disk      = $this->disk();
         $timestamp = now()->format('Y-m-d_His');
         $filename  = "{$prefix}_{$timestamp}.{$format}";
         $path      = self::DIRECTORY . '/' . $filename;
         $tmp       = tempnam(sys_get_temp_dir(), 'bkp_');
+        $bundle    = null; // fichier ZIP temporaire si médias inclus
 
         try {
             // Le builder écrit dans $tmp et renvoie l'extension réellement produite.
             $extension = $this->writeDump($format, $tmp);
+
+            // Fichier final = dump seul, ou archive ZIP (dump + médias).
+            $finalTmp  = $tmp;
+            if ($withMedia) {
+                $bundle    = $this->bundleWithMedia($tmp, "dump.{$extension}");
+                $finalTmp  = $bundle;
+                $extension = 'zip';
+            }
+
             $filename  = "{$prefix}_{$timestamp}.{$extension}";
             $path      = self::DIRECTORY . '/' . $filename;
-            $size      = filesize($tmp) ?: 0;
-            $checksum  = hash_file('sha256', $tmp) ?: null;
+            $size      = filesize($finalTmp) ?: 0;
+            $checksum  = hash_file('sha256', $finalTmp) ?: null;
 
-            $stream = fopen($tmp, 'rb');
+            $stream = fopen($finalTmp, 'rb');
             Storage::disk($disk)->writeStream($path, $stream);
             if (is_resource($stream)) {
                 fclose($stream);
             }
 
             return Backup::create(array_merge([
-                'filename'   => $filename,
-                'path'       => $path,
-                'disk'       => $this->driverName(),
-                'format'     => $format,
-                'size'       => $size,
-                'checksum'   => $checksum,
-                'status'     => 'completed',
-                'scheduled'  => $scheduled,
-                'created_by' => $userId,
+                'filename'       => $filename,
+                'path'           => $path,
+                'disk'           => $this->driverName(),
+                'format'         => $format,
+                'size'           => $size,
+                'checksum'       => $checksum,
+                'includes_media' => $withMedia,
+                'status'         => 'completed',
+                'scheduled'      => $scheduled,
+                'created_by'     => $userId,
             ], $extra));
         } catch (\Throwable $e) {
             $backup = Backup::create(array_merge([
@@ -142,6 +153,82 @@ class BackupService
         } finally {
             if (is_string($tmp) && is_file($tmp)) {
                 @unlink($tmp);
+            }
+            if (is_string($bundle) && is_file($bundle)) {
+                @unlink($bundle);
+            }
+        }
+    }
+
+    /**
+     * Emballe le dump de base + tous les fichiers uploadés (disques « media »
+     * hors dossier des sauvegardes, et « secure ») dans une archive ZIP.
+     *
+     * @return string  chemin du fichier ZIP temporaire
+     */
+    private function bundleWithMedia(string $dumpTmp, string $dumpInnerName): string
+    {
+        $zipPath = tempnam(sys_get_temp_dir(), 'zip_');
+        $zip     = new \ZipArchive();
+
+        if ($zip->open($zipPath, \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException("Impossible de créer l'archive ZIP.");
+        }
+
+        $temps = []; // fichiers temporaires (disques distants) à nettoyer après fermeture
+        $zip->addFile($dumpTmp, 'database/' . $dumpInnerName);
+        $this->addDiskToZip($zip, 'media', 'media', [self::DIRECTORY], $temps);
+        $this->addDiskToZip($zip, 'secure', 'secure', [], $temps);
+        $zip->close();
+
+        foreach ($temps as $t) {
+            @unlink($t);
+        }
+
+        return $zipPath;
+    }
+
+    /**
+     * Ajoute au ZIP tous les fichiers d'un disque, sous un préfixe, en excluant
+     * certains dossiers de premier niveau (ex. le dossier des sauvegardes).
+     *
+     * @param  array<int,string>  $excludeDirs
+     * @param  array<int,string>  $temps  accumule les fichiers temporaires créés (disques distants)
+     */
+    private function addDiskToZip(\ZipArchive $zip, string $diskName, string $prefix, array $excludeDirs, array &$temps): void
+    {
+        try {
+            $disk  = Storage::disk($diskName);
+            $files = $disk->allFiles();
+        } catch (\Throwable) {
+            return; // disque absent ou illisible : on n'échoue pas la sauvegarde
+        }
+
+        foreach ($files as $rel) {
+            foreach ($excludeDirs as $dir) {
+                if (str_starts_with($rel, $dir . '/')) {
+                    continue 2;
+                }
+            }
+
+            // Disque local : on référence le fichier directement (aucune mémoire).
+            $local = null;
+            try {
+                $p = $disk->path($rel);
+                if (is_file($p)) {
+                    $local = $p;
+                }
+            } catch (\Throwable) {
+                // Disque distant : pas de chemin local.
+            }
+
+            if ($local !== null) {
+                $zip->addFile($local, "{$prefix}/{$rel}");
+            } else {
+                $t = tempnam(sys_get_temp_dir(), 'med_');
+                file_put_contents($t, $disk->get($rel));
+                $temps[] = $t;
+                $zip->addFile($t, "{$prefix}/{$rel}");
             }
         }
     }
@@ -193,17 +280,30 @@ class BackupService
             // On n'empêche pas la restauration si le snapshot échoue
         }
 
+        // Archive complète (base + médias)
+        if (str_ends_with($name, '.zip')) {
+            return $this->restoreZip($real);
+        }
+
+        return $this->restoreDbFile($real, $name);
+    }
+
+    /** Restaure la base depuis un fichier de dump (json[.gz], sql[.gz] ou dump PostgreSQL). */
+    private function restoreDbFile(string $path, string $name): array
+    {
+        $name = strtolower($name);
+
         // Dump natif PostgreSQL (format custom)
         if (str_ends_with($name, '.dump') || str_ends_with($name, '.pgdump')) {
-            return $this->restorePgDump($real);
+            return $this->restorePgDump($path);
         }
 
         // Fichier compressé : on décompresse dans un fichier temporaire
-        $source = $real;
+        $source = $path;
         $tmp    = null;
         if (str_ends_with($name, '.gz')) {
             $tmp = tempnam(sys_get_temp_dir(), 'rst_');
-            $this->gunzip($real, $tmp);
+            $this->gunzip($path, $tmp);
             $source = $tmp;
             $name   = substr($name, 0, -3); // retire « .gz »
         }
@@ -213,7 +313,7 @@ class BackupService
             if ($tmp) {
                 @unlink($tmp);
             }
-            throw new \InvalidArgumentException('Format non supporté (JSON, SQL ou dump PostgreSQL attendu).');
+            throw new \InvalidArgumentException('Format non supporté (JSON, SQL, dump PostgreSQL ou ZIP attendu).');
         }
 
         try {
@@ -225,6 +325,89 @@ class BackupService
                 @unlink($tmp);
             }
         }
+    }
+
+    /**
+     * Restaure une archive ZIP complète : la base (dossier database/) puis les
+     * fichiers uploadés (dossiers media/ et secure/).
+     */
+    private function restoreZip(string $zipPath): array
+    {
+        $dir = sys_get_temp_dir() . '/rstzip_' . bin2hex(random_bytes(6));
+        mkdir($dir, 0700, true);
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath) !== true) {
+            throw new \RuntimeException("Archive ZIP illisible.");
+        }
+        $zip->extractTo($dir);
+        $zip->close();
+
+        try {
+            // Base de données
+            $dbFiles = glob($dir . '/database/*') ?: [];
+            if (empty($dbFiles)) {
+                throw new \RuntimeException("L'archive ne contient pas de sauvegarde de base (dossier database/).");
+            }
+            $dbFile = $dbFiles[0];
+            $result = $this->restoreDbFile($dbFile, basename($dbFile));
+
+            // Médias
+            $mediaCount = $this->restoreDiskFromDir($dir . '/media', 'media')
+                + $this->restoreDiskFromDir($dir . '/secure', 'secure');
+
+            $result['media'] = $mediaCount;
+
+            return $result;
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    /** Recopie récursivement un dossier extrait vers un disque applicatif. */
+    private function restoreDiskFromDir(string $sourceDir, string $diskName): int
+    {
+        if (! is_dir($sourceDir)) {
+            return 0;
+        }
+
+        $disk  = Storage::disk($diskName);
+        $count = 0;
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($sourceDir, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile()) {
+                continue;
+            }
+            $rel    = ltrim(str_replace('\\', '/', substr($file->getPathname(), strlen($sourceDir))), '/');
+            $stream = fopen($file->getPathname(), 'rb');
+            $disk->writeStream($rel, $stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /** Suppression récursive d'un dossier temporaire. */
+    private function removeDir(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($items as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+        @rmdir($dir);
     }
 
     /** Restaure depuis un export JSON (vide puis réinsère chaque table). */

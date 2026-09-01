@@ -249,6 +249,62 @@ class BackupTest extends TestCase
         Notification::assertSentTo($admin, BackupFailedNotification::class);
     }
 
+    public function test_backup_with_media_produces_a_zip_bundle(): void
+    {
+        Storage::fake('secure');
+        Storage::disk('media')->put('logos/ecole.png', 'PNGDATA');
+
+        $this->actingAs($this->admin())
+            ->post(route('backups.store'), ['formats' => ['json'], 'with_media' => true]);
+
+        $backup = Backup::firstOrFail();
+        $this->assertTrue($backup->includes_media);
+        $this->assertStringEndsWith('.zip', $backup->filename);
+
+        // Le ZIP contient bien la base et les médias.
+        $tmp = tempnam(sys_get_temp_dir(), 'ziptest_');
+        file_put_contents($tmp, Storage::disk('media')->get($backup->path));
+        $zip = new \ZipArchive();
+        $zip->open($tmp);
+
+        $this->assertNotFalse($zip->locateName('media/logos/ecole.png'));
+        $hasDb = false;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            if (str_starts_with((string) $zip->getNameIndex($i), 'database/')) {
+                $hasDb = true;
+                break;
+            }
+        }
+        $zip->close();
+        @unlink($tmp);
+
+        $this->assertTrue($hasDb, "L'archive doit contenir la sauvegarde de base.");
+    }
+
+    public function test_restore_from_media_zip_restores_db_and_files(): void
+    {
+        Storage::fake('secure');
+        $u = User::factory()->create(['firstname' => 'Yao', 'lastname' => 'Adjo']);
+        Storage::disk('media')->put('docs/bulletin.pdf', 'PDFDATA');
+
+        $this->actingAs($this->admin())
+            ->post(route('backups.store'), ['formats' => ['json'], 'with_media' => true]);
+        $zip = Storage::disk('media')->get(Backup::firstOrFail()->path);
+
+        $u->forceDelete();
+        Storage::disk('media')->delete('docs/bulletin.pdf');
+        $this->assertDatabaseMissing('users', ['id' => $u->id]);
+        $this->assertFalse(Storage::disk('media')->exists('docs/bulletin.pdf'));
+
+        app(BackupService::class)->restore(
+            UploadedFile::fake()->createWithContent('bundle.zip', $zip)
+        );
+
+        $this->assertDatabaseHas('users', ['id' => $u->id, 'firstname' => 'Yao']);
+        $this->assertTrue(Storage::disk('media')->exists('docs/bulletin.pdf'));
+        $this->assertSame('PDFDATA', Storage::disk('media')->get('docs/bulletin.pdf'));
+    }
+
     public function test_admin_can_archive_academic_year(): void
     {
         $year = $this->academicYear();

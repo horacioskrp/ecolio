@@ -72,13 +72,14 @@ class BackupController extends Controller
         $this->authorizeAdmin($request);
 
         $validated = $request->validate([
-            'formats'   => ['required', 'array', 'min:1'],
-            'formats.*' => ['in:json,sql'],
+            'formats'    => ['required', 'array', 'min:1'],
+            'formats.*'  => ['in:json,sql'],
+            'with_media' => ['sometimes', 'boolean'],
         ], [
             'formats.required' => 'Choisissez au moins un format.',
         ]);
 
-        RunBackupJob::dispatch($validated['formats'], $request->user()->id);
+        RunBackupJob::dispatch($validated['formats'], $request->user()->id, false, (bool) ($validated['with_media'] ?? false));
 
         return back()->with(
             'success',
@@ -122,8 +123,8 @@ class BackupController extends Controller
         ]);
 
         $ext = strtolower($request->file('file')->getClientOriginalExtension());
-        if (! in_array($ext, ['json', 'sql', 'gz', 'dump'], true)) {
-            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json, .sql, .gz ou .dump.']);
+        if (! in_array($ext, ['json', 'sql', 'gz', 'dump', 'zip'], true)) {
+            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json, .sql, .gz, .dump ou .zip.']);
         }
 
         try {

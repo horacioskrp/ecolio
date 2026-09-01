@@ -30,11 +30,12 @@ class RunBackupJob implements ShouldQueue
         public array $formats,
         public ?string $userId = null,
         public bool $scheduled = false,
+        public bool $withMedia = false,
     ) {
     }
 
     public function handle(BackupService $service): void
     {
-        $service->run($this->formats, $this->userId, $this->scheduled);
+        $service->run($this->formats, $this->userId, $this->scheduled, $this->withMedia);
     }
 }
