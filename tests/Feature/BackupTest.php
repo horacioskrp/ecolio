@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Constants\Roles;
+use App\Jobs\ArchiveAcademicYearJob;
+use App\Models\AcademicYear;
 use App\Models\Backup;
 use App\Models\BackupSetting;
 use App\Models\User;
@@ -10,6 +12,7 @@ use App\Services\BackupService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -30,6 +33,16 @@ class BackupTest extends TestCase
         $u->assignRole(Roles::ADMINISTRATOR);
 
         return $u;
+    }
+
+    private function academicYear(string $year = '2024-2025', bool $active = true): AcademicYear
+    {
+        return AcademicYear::create([
+            'year'       => $year,
+            'start_date' => substr($year, 0, 4) . '-09-01',
+            'end_date'   => substr($year, 5, 4) . '-07-01',
+            'active'     => $active,
+        ]);
     }
 
     public function test_admin_can_generate_backup_in_both_formats(): void
@@ -193,5 +206,67 @@ class BackupTest extends TestCase
 
         // Au plus 3 sauvegardes JSON conservées
         $this->assertLessThanOrEqual(3, Backup::where('format', 'json')->count());
+    }
+
+    public function test_admin_can_archive_academic_year(): void
+    {
+        $year = $this->academicYear();
+
+        $this->actingAs($this->admin())
+            ->post(route('backups.archive'), ['academic_year_id' => $year->id])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $archive = Backup::where('locked', true)->firstOrFail();
+        $this->assertSame($year->id, $archive->academic_year_id);
+        $this->assertSame('Année 2024-2025', $archive->label);
+        $this->assertSame('completed', $archive->status);
+        Storage::disk('media')->assertExists($archive->path);
+    }
+
+    public function test_archiving_is_idempotent_per_year(): void
+    {
+        $year = $this->academicYear();
+
+        $this->actingAs($this->admin())->post(route('backups.archive'), ['academic_year_id' => $year->id]);
+        $this->actingAs($this->admin())
+            ->post(route('backups.archive'), ['academic_year_id' => $year->id])
+            ->assertSessionHas('error');
+
+        $this->assertSame(1, Backup::where('locked', true)->where('academic_year_id', $year->id)->count());
+    }
+
+    public function test_locked_archives_are_never_pruned_by_retention(): void
+    {
+        BackupSetting::set('retention', '1');
+        $year = $this->academicYear();
+
+        app(BackupService::class)->archiveAcademicYear($year);
+        $archiveId = Backup::where('locked', true)->value('id');
+
+        // Plusieurs sauvegardes SQL normales, bien au-delà de la rétention
+        for ($i = 0; $i < 3; $i++) {
+            app(BackupService::class)->run(['sql']);
+        }
+
+        $this->assertDatabaseHas('backups', ['id' => $archiveId, 'locked' => true]);
+        $this->assertLessThanOrEqual(1, Backup::where('format', 'sql')->where('locked', false)->count());
+    }
+
+    public function test_closing_academic_year_dispatches_archive_job(): void
+    {
+        Queue::fake();
+        $year = $this->academicYear('2023-2024', active: true);
+
+        $this->actingAs($this->admin())
+            ->put(route('academic-years.update', $year), [
+                'year'       => '2023-2024',
+                'start_date' => '2023-09-01',
+                'end_date'   => '2024-07-01',
+                'active'     => false,
+            ])
+            ->assertRedirect();
+
+        Queue::assertPushed(ArchiveAcademicYearJob::class, fn ($job) => $job->academicYearId === $year->id);
     }
 }

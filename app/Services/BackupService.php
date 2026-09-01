@@ -44,59 +44,96 @@ class BackupService
     public function run(array $formats, ?string $userId = null, bool $scheduled = false): Collection
     {
         $formats = array_values(array_intersect($formats, ['json', 'sql'])) ?: ['json'];
-        $disk    = $this->disk();
         $results = collect();
 
         foreach ($formats as $format) {
-            $timestamp = now()->format('Y-m-d_His');
-            $filename  = "backup_{$timestamp}.{$format}";
-            $path      = self::DIRECTORY . '/' . $filename;
-            $tmp       = tempnam(sys_get_temp_dir(), 'bkp_');
-
-            try {
-                // Le builder écrit dans $tmp et renvoie l'extension réellement produite.
-                $extension = $this->writeDump($format, $tmp);
-                $filename  = "backup_{$timestamp}.{$extension}";
-                $path      = self::DIRECTORY . '/' . $filename;
-                $size      = filesize($tmp) ?: 0;
-
-                $stream = fopen($tmp, 'rb');
-                Storage::disk($disk)->writeStream($path, $stream);
-                if (is_resource($stream)) {
-                    fclose($stream);
-                }
-
-                $results->push(Backup::create([
-                    'filename'   => $filename,
-                    'path'       => $path,
-                    'disk'       => $this->driverName(),
-                    'format'     => $format,
-                    'size'       => $size,
-                    'status'     => 'completed',
-                    'scheduled'  => $scheduled,
-                    'created_by' => $userId,
-                ]));
-            } catch (\Throwable $e) {
-                $results->push(Backup::create([
-                    'filename'   => $filename,
-                    'path'       => $path,
-                    'disk'       => $this->driverName(),
-                    'format'     => $format,
-                    'status'     => 'failed',
-                    'error'      => mb_substr($e->getMessage(), 0, 1000),
-                    'scheduled'  => $scheduled,
-                    'created_by' => $userId,
-                ]));
-            } finally {
-                if (is_string($tmp) && is_file($tmp)) {
-                    @unlink($tmp);
-                }
-            }
+            $results->push($this->generate($format, 'backup', $userId, $scheduled));
         }
 
         $this->applyRetention();
 
         return $results;
+    }
+
+    /**
+     * Archive verrouillée d'une année scolaire (clôture) : snapshot complet
+     * étiqueté, conservé à long terme et exclu de la rétention automatique.
+     * Idempotent : au plus une archive verrouillée par année.
+     */
+    public function archiveAcademicYear(\App\Models\AcademicYear $year, ?string $userId = null, bool $scheduled = false): ?Backup
+    {
+        $already = Backup::where('academic_year_id', $year->id)
+            ->where('locked', true)
+            ->where('status', 'completed')
+            ->exists();
+
+        if ($already) {
+            return null;
+        }
+
+        $prefix = 'archive_' . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $year->year);
+
+        // Format SQL : dump complet (schéma inclus sur PostgreSQL via pg_dump).
+        return $this->generate('sql', $prefix, $userId, $scheduled, [
+            'academic_year_id' => $year->id,
+            'label'            => 'Année ' . $year->year,
+            'locked'           => true,
+        ]);
+    }
+
+    /**
+     * Génère un fichier de sauvegarde (un format), l'enregistre sur le disque
+     * et trace le résultat. La rétention n'est PAS appliquée ici.
+     *
+     * @param  array<string,mixed>  $extra  attributs additionnels (label, locked, academic_year_id…)
+     */
+    private function generate(string $format, string $prefix, ?string $userId, bool $scheduled, array $extra = []): Backup
+    {
+        $disk      = $this->disk();
+        $timestamp = now()->format('Y-m-d_His');
+        $filename  = "{$prefix}_{$timestamp}.{$format}";
+        $path      = self::DIRECTORY . '/' . $filename;
+        $tmp       = tempnam(sys_get_temp_dir(), 'bkp_');
+
+        try {
+            // Le builder écrit dans $tmp et renvoie l'extension réellement produite.
+            $extension = $this->writeDump($format, $tmp);
+            $filename  = "{$prefix}_{$timestamp}.{$extension}";
+            $path      = self::DIRECTORY . '/' . $filename;
+            $size      = filesize($tmp) ?: 0;
+
+            $stream = fopen($tmp, 'rb');
+            Storage::disk($disk)->writeStream($path, $stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+
+            return Backup::create(array_merge([
+                'filename'   => $filename,
+                'path'       => $path,
+                'disk'       => $this->driverName(),
+                'format'     => $format,
+                'size'       => $size,
+                'status'     => 'completed',
+                'scheduled'  => $scheduled,
+                'created_by' => $userId,
+            ], $extra));
+        } catch (\Throwable $e) {
+            return Backup::create(array_merge([
+                'filename'   => $filename,
+                'path'       => $path,
+                'disk'       => $this->driverName(),
+                'format'     => $format,
+                'status'     => 'failed',
+                'error'      => mb_substr($e->getMessage(), 0, 1000),
+                'scheduled'  => $scheduled,
+                'created_by' => $userId,
+            ], $extra));
+        } finally {
+            if (is_string($tmp) && is_file($tmp)) {
+                @unlink($tmp);
+            }
+        }
     }
 
     /**
@@ -469,6 +506,7 @@ class BackupService
         foreach (['json', 'sql'] as $format) {
             Backup::where('format', $format)
                 ->where('status', 'completed')
+                ->where('locked', false) // les archives d'année scolaire ne sont jamais purgées
                 ->orderByDesc('created_at')
                 ->skip($retention)
                 ->take(PHP_INT_MAX)

@@ -1,7 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
-    AlertCircle, AlertTriangle, CheckCircle2, Clock, Cloud, Database, DatabaseBackup,
-    Download, HardDrive, Play, Trash2, Upload,
+    AlertCircle, AlertTriangle, Archive, CheckCircle2, Clock, Cloud, Database, DatabaseBackup,
+    Download, HardDrive, Lock, Play, Trash2, Upload,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
@@ -19,10 +19,12 @@ import AppLayout from '@/layouts/app-layout';
 interface BackupRow {
     id: string; filename: string; format: string; disk: string; size: number;
     status: string; error: string | null; scheduled: boolean;
+    locked?: boolean; label?: string | null;
     created_by: string | null; created_at: string | null;
 }
+interface AcademicYearRow { id: string; year: string; archived: boolean; }
 interface Settings { frequency: string; time: string; day_of_week: string; formats: string; retention: string; }
-interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; }
+interface Props { backups: BackupRow[]; settings: Settings; storageDriver: string; academicYears: AcademicYearRow[]; }
 
 const DAYS = [
     { v: '1', l: 'Lundi' }, { v: '2', l: 'Mardi' }, { v: '3', l: 'Mercredi' },
@@ -31,10 +33,22 @@ const DAYS = [
 
 const fmtSize = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`;
 
-export default function Backups({ backups, settings, storageDriver }: Readonly<Props>) {
+export default function Backups({ backups, settings, storageDriver, academicYears }: Readonly<Props>) {
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [runFormats, setRunFormats] = useState<string[]>(['json', 'sql']);
     const [running, setRunning] = useState(false);
+
+    const [archiveYear, setArchiveYear] = useState<string>('');
+    const [archiving, setArchiving] = useState(false);
+    const runArchive = () => {
+        if (!archiveYear) return;
+        setArchiving(true);
+        router.post(route('backups.archive'), { academic_year_id: archiveYear }, {
+            preserveScroll: true,
+            onSuccess: () => setArchiveYear(''),
+            onFinish: () => setArchiving(false),
+        });
+    };
 
     const restoreInputRef = useRef<HTMLInputElement>(null);
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
@@ -122,6 +136,35 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                         </div>
                         <Button onClick={runNow} disabled={running || runFormats.length === 0} className="bg-blue-600 hover:bg-blue-700 gap-2">
                             <Database className="w-4 h-4" /> {running ? 'Sauvegarde…' : 'Lancer la sauvegarde'}
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Archive d'année scolaire */}
+                <div className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 p-5">
+                    <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-1">
+                        <Archive className="w-4 h-4 text-cyan-600" /> Archiver une année scolaire
+                    </h2>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Génère un instantané complet <strong>verrouillé</strong> et conservé à long terme (exclu de la rétention automatique).
+                        L'archive est aussi créée automatiquement à la clôture d'une année.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-1.5 min-w-56">
+                            <label className="text-sm font-medium text-gray-700">Année scolaire</label>
+                            <Select value={archiveYear} onValueChange={setArchiveYear}>
+                                <SelectTrigger><SelectValue placeholder="Choisir une année…" /></SelectTrigger>
+                                <SelectContent>
+                                    {academicYears.map(y => (
+                                        <SelectItem key={y.id} value={y.id} disabled={y.archived}>
+                                            {y.year}{y.archived ? ' — déjà archivée' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={runArchive} disabled={archiving || !archiveYear} className="bg-cyan-600 hover:bg-cyan-700 gap-2">
+                            <Archive className="w-4 h-4" /> {archiving ? 'Archivage…' : "Archiver l'année"}
                         </Button>
                     </div>
                 </div>
@@ -234,7 +277,14 @@ export default function Backups({ backups, settings, storageDriver }: Readonly<P
                                 <TableRow><TableCell colSpan={7} className="py-12 text-center text-gray-400">Aucune sauvegarde pour le moment.</TableCell></TableRow>
                             ) : backups.map(b => (
                                 <TableRow key={b.id} className="hover:bg-gray-50">
-                                    <TableCell className="font-mono text-xs text-gray-700">{b.filename}</TableCell>
+                                    <TableCell className="font-mono text-xs text-gray-700">
+                                        {b.filename}
+                                        {b.locked && (
+                                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-cyan-50 px-2 py-0.5 font-sans text-[11px] font-medium text-cyan-700 ring-1 ring-cyan-100">
+                                                <Lock className="w-3 h-3" /> {b.label ?? 'Archive'}
+                                            </span>
+                                        )}
+                                    </TableCell>
                                     <TableCell><span className="text-xs font-bold uppercase text-blue-600">{b.format}</span></TableCell>
                                     <TableCell className="text-sm text-gray-600">{b.status === 'completed' ? fmtSize(b.size) : '—'}</TableCell>
                                     <TableCell className="text-xs text-gray-500">{b.scheduled ? 'Planifiée' : (b.created_by ?? 'Manuelle')}</TableCell>

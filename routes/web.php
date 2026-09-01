@@ -303,6 +303,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Sauvegardes de la base de données
     Route::get('settings/backups', [\App\Http\Controllers\Parametres\BackupController::class, 'index'])->middleware('can:view_backups')->name('backups.index');
     Route::post('settings/backups', [\App\Http\Controllers\Parametres\BackupController::class, 'store'])->middleware('can:create_backups')->name('backups.store');
+    Route::post('settings/backups/archive', [\App\Http\Controllers\Parametres\BackupController::class, 'archive'])->middleware('can:create_backups')->name('backups.archive');
     Route::post('settings/backups/schedule', [\App\Http\Controllers\Parametres\BackupController::class, 'updateSchedule'])->middleware('can:create_backups')->name('backups.schedule');
     Route::post('settings/backups/restore', [\App\Http\Controllers\Parametres\BackupController::class, 'restore'])->middleware('can:restore_backups')->name('backups.restore');
     Route::get('settings/backups/{backup}/download', [\App\Http\Controllers\Parametres\BackupController::class, 'download'])->middleware('can:view_backups')->name('backups.download');

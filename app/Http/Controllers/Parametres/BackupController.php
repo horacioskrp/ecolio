@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Parametres;
 use App\Http\Controllers\Controller;
 
 use App\Constants\Roles;
+use App\Jobs\ArchiveAcademicYearJob;
 use App\Jobs\RunBackupJob;
+use App\Models\AcademicYear;
 use App\Models\Backup;
 use App\Models\BackupSetting;
 use App\Models\FileStorageSetting;
@@ -43,6 +45,8 @@ class BackupController extends Controller
                 'status'     => $b->status,
                 'error'      => $b->error,
                 'scheduled'  => $b->scheduled,
+                'locked'     => $b->locked,
+                'label'      => $b->label,
                 'created_by' => $b->createdBy?->name,
                 'created_at' => $b->created_at?->format('d/m/Y H:i'),
             ]);
@@ -51,6 +55,13 @@ class BackupController extends Controller
             'backups'        => $backups,
             'settings'       => BackupSetting::allSettings(),
             'storageDriver'  => FileStorageSetting::get('driver', 'local') === 's3' ? 's3' : 'local',
+            'academicYears'  => AcademicYear::orderByDesc('start_date')->get(['id', 'year'])
+                ->map(fn (AcademicYear $y) => [
+                    'id'       => $y->id,
+                    'year'     => $y->year,
+                    'archived' => Backup::where('academic_year_id', $y->id)
+                        ->where('locked', true)->where('status', 'completed')->exists(),
+                ]),
         ]);
     }
 
@@ -71,6 +82,30 @@ class BackupController extends Controller
             'success',
             'Sauvegarde lancée. Elle apparaîtra dans la liste une fois terminée.'
         );
+    }
+
+    public function archive(Request $request): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'academic_year_id' => ['required', 'uuid', 'exists:academic_years,id'],
+        ], [
+            'academic_year_id.required' => 'Choisissez une année scolaire à archiver.',
+        ]);
+
+        $year = AcademicYear::findOrFail($validated['academic_year_id']);
+
+        $exists = Backup::where('academic_year_id', $year->id)
+            ->where('locked', true)->where('status', 'completed')->exists();
+
+        if ($exists) {
+            return back()->with('error', "Une archive verrouillée existe déjà pour l'année {$year->year}.");
+        }
+
+        ArchiveAcademicYearJob::dispatch($year->id, $request->user()->id);
+
+        return back()->with('success', "Archive de l'année {$year->year} lancée. Elle apparaîtra dans la liste une fois terminée.");
     }
 
     public function restore(Request $request): RedirectResponse

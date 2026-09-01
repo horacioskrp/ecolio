@@ -12,15 +12,22 @@ class Backup extends Model
 
     protected $fillable = [
         'filename', 'path', 'disk', 'format', 'size', 'status', 'error', 'scheduled', 'created_by',
+        'academic_year_id', 'label', 'locked',
     ];
 
     protected $casts = [
         'size'      => 'integer',
         'scheduled' => 'boolean',
+        'locked'    => 'boolean',
     ];
 
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function academicYear(): BelongsTo
+    {
+        return $this->belongsTo(AcademicYear::class, 'academic_year_id');
     }
 }
