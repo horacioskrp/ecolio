@@ -193,14 +193,23 @@ Un visualiseur **Redoc** est exposé sur **`/docs/api`**, mais **gardé par l'en
 
 ### Sauvegardes de la base de données
 
-- Sauvegarde de la base depuis l'interface (Paramètres → Sauvegardes), aux formats **JSON** et **SQL**
-- Stockage sur le **dépôt distant** configuré (S3 / Cloudflare R2) ou en local — via la même configuration centralisée que les uploads
+- Sauvegarde de la base depuis l'interface (Paramètres → Sauvegardes), aux formats **JSON** (export logique portable) et **SQL**
+- **Conçu pour tenir sur plusieurs années de données** : écriture **en flux** (jamais toute la base en mémoire) et **compression gzip** systématique (`.json.gz` / `.sql.gz`, ~85 % de taille en moins)
+- Sur **PostgreSQL**, le format SQL est produit par **`pg_dump`** natif (format custom `-Fc`, schéma inclus, restaurable sur serveur vierge), avec repli automatique sur l'export portable
+- Stockage sur le **dépôt distant** configuré (S3 / Cloudflare R2) ou en local — via la même configuration centralisée que les uploads (envoi en streaming)
+- **Sauvegarde des médias au choix** : option _« inclure les médias »_ → archive **`.zip`** regroupant la base + les fichiers uploadés (disques `media` et `secure` : documents, photos, PDF)
+- **Archives par année scolaire** : instantané complet **verrouillé** et étiqueté, **exclu de la rétention** (conservé à long terme) ; déclenché manuellement ou **automatiquement à la clôture d'une année**
+- **Intégrité** : empreinte **SHA-256** enregistrée pour chaque sauvegarde + bouton **_Vérifier l'intégrité_** (détection de corruption / bit-rot)
+- **Alerte e-mail** aux administrateurs en cas d'échec d'une sauvegarde
 - **Planification** des sauvegardes automatiques : quotidienne ou hebdomadaire, heure et jour configurables
-- **Rétention** automatique (nombre de sauvegardes conservées par format)
-- Historique des sauvegardes (taille, statut, origine manuelle/planifiée), téléchargement et suppression
-- **Restauration** : import d'un fichier `.json` ou `.sql` pour réécrire la base ; une **sauvegarde de sécurité** est générée automatiquement avant l'opération
+- **Rétention** automatique (nombre de sauvegardes conservées par format) — les **archives d'année verrouillées ne sont jamais purgées**
+- Historique des sauvegardes (taille, statut, origine manuelle/planifiée, empreinte, badges _Archive_ / _+ médias_), téléchargement et suppression
+- **Restauration** : import d'un fichier `.json`, `.sql`, `.gz`, `.dump` (PostgreSQL) ou `.zip` (base + médias) ; une **sauvegarde de sécurité** est générée automatiquement avant l'opération
+- **Restauration sélective** par table (format JSON) : ne réécrit qu'une seule table, par lots bornés — utile pour corriger une table sans tout recharger
 - Commande CLI : `php artisan backup:run --formats=json,sql`
 - Les sauvegardes **manuelles** (interface) sont traitées en arrière-plan : un **worker** de file d'attente doit tourner (voir _Installation → étape 7_). Les sauvegardes **planifiées** et la commande CLI s'exécutent, elles, de façon synchrone.
+
+> ℹ️ Le format **SQL natif** en production requiert les binaires **`pg_dump`** / **`pg_restore`** installés sur le serveur (client PostgreSQL). En leur absence, l'application bascule automatiquement sur l'export SQL portable.
 - Page réservée aux administrateurs
 
 ## 📋 Prérequis
@@ -431,7 +440,7 @@ Ces comptes sont marqués `is_demo = true` : une **bannière d'avertissement** s
 | `document_issuances`                      | Traçabilité des documents délivrés par élève                  |
 | `note_reclamations`                       | Réclamations sur les notes                                    |
 | `file_storage_settings`                   | Configuration du stockage des fichiers (local / S3, chiffrée) |
-| `backups`                                 | Historique des sauvegardes de base de données (JSON / SQL)    |
+| `backups`                                 | Historique des sauvegardes (format, taille, empreinte SHA-256, médias inclus, archive d'année verrouillée) |
 | `backup_settings`                         | Planification et options des sauvegardes                      |
 
 ## 🔐 Sécurité

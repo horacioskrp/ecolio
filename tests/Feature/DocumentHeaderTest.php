@@ -86,7 +86,9 @@ class DocumentHeaderTest extends TestCase
         $config['watermark']['enabled'] = true;
         $config['watermark']['text']    = 'CONFIDENTIEL';
 
-        DocumentHeader::create([
+        // Toute école dispose déjà d'un en-tête par défaut (provisionné à sa création) :
+        // on le met à jour plutôt que d'en créer un second (contrainte d'unicité).
+        DocumentHeader::updateOrCreate(['school_id' => $school->id], [
             'school_id' => $school->id,
             'preset'    => 'personnalise',
             'layout'    => $config['layout'],
@@ -123,7 +125,9 @@ class DocumentHeaderTest extends TestCase
         $config['watermark']['color'] = 'red;"><img src=x>';
         $config['watermark']['text'] = 'WM';
 
-        DocumentHeader::create([
+        // Toute école dispose déjà d'un en-tête par défaut (provisionné à sa création) :
+        // on le met à jour plutôt que d'en créer un second (contrainte d'unicité).
+        DocumentHeader::updateOrCreate(['school_id' => $school->id], [
             'school_id' => $school->id,
             'preset'    => 'personnalise',
             'layout'    => $config['layout'],
@@ -193,7 +197,9 @@ class DocumentHeaderTest extends TestCase
         $school = School::factory()->create(['name' => 'École Bascule']);
         $config = DocumentHeader::defaultLayout($school);
 
-        DocumentHeader::create([
+        // Toute école dispose déjà d'un en-tête par défaut (provisionné à sa création) :
+        // on le met à jour plutôt que d'en créer un second (contrainte d'unicité).
+        DocumentHeader::updateOrCreate(['school_id' => $school->id], [
             'school_id' => $school->id,
             'preset'    => 'ministeriel',
             'layout'    => $config['layout'],

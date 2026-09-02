@@ -51,6 +51,7 @@ class User extends Authenticatable
         'address',
         'password',
         'is_demo',
+        'must_change_password',
     ];
 
     /**
@@ -87,6 +88,7 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'birth_date' => 'date',
             'is_demo' => 'boolean',
+            'must_change_password' => 'boolean',
         ];
     }
 

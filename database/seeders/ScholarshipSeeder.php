@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Scholarship;
 use Illuminate\Database\Seeder;
 
 class ScholarshipSeeder extends Seeder
@@ -46,7 +46,7 @@ class ScholarshipSeeder extends Seeder
         ];
 
         foreach ($scholarships as $scholarship) {
-            \App\Models\Scholarship::firstOrCreate(['name' => $scholarship['name']], $scholarship);
+            Scholarship::firstOrCreate(['name' => $scholarship['name']], $scholarship);
         }
     }
 }

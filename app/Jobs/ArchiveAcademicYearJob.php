@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\AcademicYear;
 use App\Services\BackupService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -10,32 +11,31 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Génère une sauvegarde de la base en arrière-plan.
+ * Génère l'archive verrouillée d'une année scolaire (clôture).
  *
- * L'opération (dump SQL / export JSON) peut être longue sur de gros volumes ;
- * on la sort du cycle requête/réponse pour ne pas bloquer l'utilisateur.
- * Le statut de chaque sauvegarde est tracé dans la table `backups`.
+ * Snapshot complet, étiqueté et conservé à long terme (exclu de la rétention).
+ * Idempotent : le service ne recrée pas d'archive si une existe déjà pour l'année.
  */
-class RunBackupJob implements ShouldQueue
+class ArchiveAcademicYearJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /** Laisse le temps aux dumps volumineux d'aboutir. */
     public int $timeout = 900;
 
-    /**
-     * @param  array<int,string>  $formats
-     */
     public function __construct(
-        public array $formats,
+        public string $academicYearId,
         public ?string $userId = null,
         public bool $scheduled = false,
-        public bool $withMedia = false,
     ) {
     }
 
     public function handle(BackupService $service): void
     {
-        $service->run($this->formats, $this->userId, $this->scheduled, $this->withMedia);
+        $year = AcademicYear::find($this->academicYearId);
+
+        if ($year) {
+            $service->archiveAcademicYear($year, $this->userId, $this->scheduled);
+        }
     }
 }

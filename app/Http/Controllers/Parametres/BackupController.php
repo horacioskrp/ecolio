@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Parametres;
 use App\Http\Controllers\Controller;
 
 use App\Constants\Roles;
+use App\Jobs\ArchiveAcademicYearJob;
 use App\Jobs\RunBackupJob;
+use App\Models\AcademicYear;
 use App\Models\Backup;
 use App\Models\BackupSetting;
 use App\Models\FileStorageSetting;
@@ -42,15 +44,27 @@ class BackupController extends Controller
                 'size'       => $b->size,
                 'status'     => $b->status,
                 'error'      => $b->error,
-                'scheduled'  => $b->scheduled,
-                'created_by' => $b->createdBy?->name,
-                'created_at' => $b->created_at?->format('d/m/Y H:i'),
+                'scheduled'      => $b->scheduled,
+                'locked'         => $b->locked,
+                'label'          => $b->label,
+                'includes_media' => $b->includes_media,
+                'checksum'       => $b->checksum ? substr($b->checksum, 0, 12) : null,
+                'created_by'     => $b->createdBy?->name,
+                'created_at'     => $b->created_at?->format('d/m/Y H:i'),
             ]);
 
         return Inertia::render('Parametres/Backups', [
             'backups'        => $backups,
             'settings'       => BackupSetting::allSettings(),
             'storageDriver'  => FileStorageSetting::get('driver', 'local') === 's3' ? 's3' : 'local',
+            'academicYears'  => AcademicYear::orderByDesc('start_date')->get(['id', 'year'])
+                ->map(fn (AcademicYear $y) => [
+                    'id'       => $y->id,
+                    'year'     => $y->year,
+                    'archived' => Backup::where('academic_year_id', $y->id)
+                        ->where('locked', true)->where('status', 'completed')->exists(),
+                ]),
+            'tables'         => $this->service->restorableTables(),
         ]);
     }
 
@@ -59,13 +73,14 @@ class BackupController extends Controller
         $this->authorizeAdmin($request);
 
         $validated = $request->validate([
-            'formats'   => ['required', 'array', 'min:1'],
-            'formats.*' => ['in:json,sql'],
+            'formats'    => ['required', 'array', 'min:1'],
+            'formats.*'  => ['in:json,sql'],
+            'with_media' => ['sometimes', 'boolean'],
         ], [
             'formats.required' => 'Choisissez au moins un format.',
         ]);
 
-        RunBackupJob::dispatch($validated['formats'], $request->user()->id);
+        RunBackupJob::dispatch($validated['formats'], $request->user()->id, false, (bool) ($validated['with_media'] ?? false));
 
         return back()->with(
             'success',
@@ -73,33 +88,78 @@ class BackupController extends Controller
         );
     }
 
+    public function archive(Request $request): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'academic_year_id' => ['required', 'uuid', 'exists:academic_years,id'],
+        ], [
+            'academic_year_id.required' => 'Choisissez une année scolaire à archiver.',
+        ]);
+
+        $year = AcademicYear::findOrFail($validated['academic_year_id']);
+
+        $exists = Backup::where('academic_year_id', $year->id)
+            ->where('locked', true)->where('status', 'completed')->exists();
+
+        if ($exists) {
+            return back()->with('error', "Une archive verrouillée existe déjà pour l'année {$year->year}.");
+        }
+
+        ArchiveAcademicYearJob::dispatch($year->id, $request->user()->id);
+
+        return back()->with('success', "Archive de l'année {$year->year} lancée. Elle apparaîtra dans la liste une fois terminée.");
+    }
+
     public function restore(Request $request): RedirectResponse
     {
         $this->authorizeAdmin($request);
 
-        $request->validate([
-            'file' => ['required', 'file', 'max:51200'], // 50 Mo
+        $validated = $request->validate([
+            'file'       => ['required', 'file', 'max:204800'], // 200 Mo
+            'only_table' => ['nullable', 'string', 'max:255'],
         ], [
             'file.required' => 'Sélectionnez un fichier de sauvegarde.',
-            'file.max'      => 'Le fichier ne doit pas dépasser 50 Mo.',
+            'file.max'      => 'Le fichier ne doit pas dépasser 200 Mo.',
         ]);
 
         $ext = strtolower($request->file('file')->getClientOriginalExtension());
-        if (! in_array($ext, ['json', 'sql'], true)) {
-            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json ou .sql.']);
+        if (! in_array($ext, ['json', 'sql', 'gz', 'dump', 'zip'], true)) {
+            return back()->withErrors(['file' => 'Format non supporté : choisissez un fichier .json, .sql, .gz, .dump ou .zip.']);
+        }
+
+        $onlyTable = $validated['only_table'] ?? null;
+        if ($onlyTable !== null && ! in_array($onlyTable, $this->service->restorableTables(), true)) {
+            return back()->withErrors(['only_table' => 'Table cible invalide.']);
         }
 
         try {
-            $result = $this->service->restore($request->file('file'));
+            $result = $this->service->restore($request->file('file'), $onlyTable);
         } catch (\Throwable $e) {
             return back()->with('error', 'Échec de la restauration : ' . $e->getMessage());
         }
 
         $detail = isset($result['rows'])
-            ? "{$result['tables']} tables, {$result['rows']} lignes"
-            : "{$result['tables']} tables";
+            ? "{$result['tables']} table(s), {$result['rows']} lignes"
+            : "{$result['tables']} table(s)";
+        if (isset($result['media'])) {
+            $detail .= ", {$result['media']} fichier(s) média";
+        }
+        $scope = $onlyTable ? " de la table « {$onlyTable} »" : '';
 
-        return back()->with('success', "Restauration effectuée ({$detail}). Une sauvegarde de sécurité a été créée au préalable.");
+        return back()->with('success', "Restauration{$scope} effectuée ({$detail}). Une sauvegarde de sécurité a été créée au préalable.");
+    }
+
+    public function verify(Request $request, Backup $backup): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+
+        $result = $this->service->verify($backup);
+
+        return $result['ok']
+            ? back()->with('success', "Contrôle d'intégrité : {$result['reason']}")
+            : back()->with('error', "Contrôle d'intégrité : {$result['reason']}");
     }
 
     public function download(Request $request, Backup $backup)

@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 
 use App\Http\Requests\StoreAcademicYearRequest;
 use App\Http\Requests\UpdateAcademicYearRequest;
+use App\Jobs\ArchiveAcademicYearJob;
 use App\Models\AcademicYear;
 use Inertia\Inertia;
 
@@ -77,7 +78,17 @@ class AcademicYearController extends Controller
      */
     public function update(UpdateAcademicYearRequest $request, AcademicYear $academicYear)
     {
+        $wasActive = (bool) $academicYear->active;
+
         $academicYear->update($request->validated());
+
+        // Clôture d'année (passage actif → inactif) : archive verrouillée en tâche de fond.
+        if ($wasActive && ! $academicYear->fresh()->active) {
+            ArchiveAcademicYearJob::dispatch($academicYear->id, $request->user()?->id);
+
+            return redirect()->route('academic-years.index')
+                ->with('message', "Année académique clôturée. Une archive de sauvegarde est en cours de génération.");
+        }
 
         return redirect()->route('academic-years.index')
             ->with('message', 'Année académique mise à jour avec succès.');
