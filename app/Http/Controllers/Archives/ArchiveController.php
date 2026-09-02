@@ -22,7 +22,11 @@ class ArchiveController extends Controller
 
     private function authorizeManage(Request $request): void
     {
-        // Autorisation déléguée aux permissions (middleware can:* sur les routes).
+        // Socle de sécurité : les routes portent déjà la permission fine (create/edit/
+        // delete_archives), mais on refuse ici tout accès sans le droit de lecture —
+        // une méthode vide donnerait l'illusion d'un contrôle et laisserait passer
+        // une route ajoutée plus tard sans `can:`.
+        abort_unless($request->user()?->can('view_archives'), 403);
     }
 
     public function index(Request $request): Response
