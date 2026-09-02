@@ -210,6 +210,16 @@ class EnrollmentController extends Controller
         // Défense en profondeur : la route porte déjà `can:delete_enrollments`.
         abort_unless($request->user()->can('delete_enrollments'), 403);
 
+        // La suppression cascade sur la facture, les paiements et les reçus, alors
+        // que les écritures comptables (lien lâche reference_id) et le solde de
+        // caisse, eux, ne sont PAS reversés : on détruirait la preuve d'un
+        // encaissement en laissant le journal et le solde inchangés.
+        if ($enrollment->invoice()->whereHas('payments')->exists()) {
+            return back()->withErrors([
+                'delete' => "Cette inscription porte des paiements : elle ne peut pas être supprimée sans corrompre la comptabilité. Changez plutôt son statut.",
+            ]);
+        }
+
         $enrollment->delete();
 
         return redirect()->route('enrollments.index')
