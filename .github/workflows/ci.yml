@@ -15,13 +15,8 @@ concurrency:
 
 jobs:
   tests:
-    name: Tests (PHP ${{ matrix.php }})
+    name: Tests (PHP 8.3)
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        php: ['8.3']
 
     steps:
       - uses: actions/checkout@v4
@@ -29,25 +24,30 @@ jobs:
       - name: Configurer PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php }}
+          php-version: '8.3'
           # sqlite : la suite tourne sur une base en mémoire (voir phpunit.xml)
           extensions: pdo_sqlite, sqlite3, mbstring, zip, gd, intl, bcmath
           coverage: none
+
+      # `.env` doit exister AVANT composer install : le script post-autoload-dump
+      # (`package:discover`) boote l'application.
+      - name: Préparer l'environnement
+        run: |
+          cp .env.example .env
+          touch database/database.sqlite
 
       - name: Cache des dépendances Composer
         uses: actions/cache@v4
         with:
           path: vendor
-          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-${{ matrix.php }}-
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
 
       - name: Installer les dépendances
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Préparer l'environnement
-        run: |
-          cp .env.example .env
-          php artisan key:generate
+      - name: Générer la clé applicative
+        run: php artisan key:generate
 
       - name: Lancer la suite de tests
         run: php artisan test
@@ -59,13 +59,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Le build a besoin de PHP : le plugin Vite Wayfinder invoque `artisan`
+      # pour générer les helpers de routes.
+      - name: Configurer PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3, mbstring, zip, gd, intl, bcmath
+          coverage: none
+
+      - name: Préparer l'environnement
+        run: |
+          cp .env.example .env
+          touch database/database.sqlite
+
+      - name: Cache des dépendances Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Installer les dépendances PHP
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Générer la clé applicative
+        run: php artisan key:generate
+
       - name: Configurer Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
 
-      - name: Installer les dépendances
+      - name: Installer les dépendances front
         run: npm ci
 
       # `npm run types` n'est pas encore branché : 11 erreurs TypeScript
