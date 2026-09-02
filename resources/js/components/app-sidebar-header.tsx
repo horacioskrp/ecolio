@@ -16,24 +16,32 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserMenuContent } from '@/components/user-menu-content';
-import { useCurrentUrl } from '@/hooks/use-current-url';
+import { toPath, useCurrentUrl } from '@/hooks/use-current-url';
 import { getFullName } from '@/hooks/use-initials';
 import { mainNavItems } from '@/types';
 
 export function AppSidebarHeader() {
     const { auth } = usePage().props;
-    const { currentUrl, isCurrentUrl } = useCurrentUrl();
+    const { currentUrl, findActiveHref } = useCurrentUrl();
 
     const fullName = getFullName(auth.user.firstname, auth.user.lastname);
     const initials = `${auth.user.firstname?.[0] ?? ''}${auth.user.lastname?.[0] ?? ''}`.toUpperCase();
 
     // Fil d'Ariane dérivé du menu selon l'URL courante : [Section, Page] ou [Page].
     const trail = useMemo<string[]>(() => {
+        // Même règle que la navigation : le lien le plus spécifique gagne, et une
+        // sous-page (/students/12/edit) reste rattachée à son entrée de menu.
+        const activeHref = findActiveHref(
+            mainNavItems.flatMap((item) => (item.items ? item.items.map((s) => s.href) : [item.href])),
+        );
+
+        if (!activeHref) return [];
+
         for (const item of mainNavItems) {
             if (item.items) {
-                const sub = item.items.find((s) => isCurrentUrl(s.href));
+                const sub = item.items.find((s) => toPath(s.href) === activeHref);
                 if (sub) return [item.title, sub.title];
-            } else if (isCurrentUrl(item.href)) {
+            } else if (toPath(item.href) === activeHref) {
                 return [item.title];
             }
         }
