@@ -16,6 +16,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -45,6 +46,24 @@ class Enrollment extends Model
         'enrollment_date'   => 'date',
         'status_changed_at' => 'datetime',
     ];
+
+    /**
+     * Statuts d'inscription, en MAJUSCULES — la base impose la contrainte
+     * `status IN ('PENDING','ACTIVE','CANCELLED')`. Comparer à 'active' en
+     * minuscules ne remonte aucune ligne : passez toujours par ces constantes
+     * ou par le scope `active()`.
+     */
+    public const STATUS_PENDING   = 'PENDING';
+    public const STATUS_ACTIVE    = 'ACTIVE';
+    public const STATUS_CANCELLED = 'CANCELLED';
+
+    public const STATUSES = [self::STATUS_PENDING, self::STATUS_ACTIVE, self::STATUS_CANCELLED];
+
+    /** Inscriptions actives. */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('status'), self::STATUS_ACTIVE);
+    }
 
     /** Statuts académiques (distincts du statut de paiement). */
     public const ACADEMIC_STATUSES = [

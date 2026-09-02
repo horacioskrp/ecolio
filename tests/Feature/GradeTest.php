@@ -63,7 +63,7 @@ class GradeTest extends TestCase
             'school_id' => $this->school->id, 'student_id' => $this->student->id,
             'class_id' => $this->class->id, 'academic_year_id' => $this->year->id,
             'enrollment_code' => 'ENR001', 'enrollment_date' => '2025-09-02',
-            'status' => 'paid', 'academic_status' => 'en_cours',
+            'status' => 'ACTIVE', 'academic_status' => 'en_cours',
         ]);
     }
 

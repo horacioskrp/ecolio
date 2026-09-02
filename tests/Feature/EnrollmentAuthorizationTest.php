@@ -73,7 +73,7 @@ class EnrollmentAuthorizationTest extends TestCase
             'school_id' => $this->school->id, 'student_id' => $student->id,
             'class_id' => $this->class->id, 'academic_year_id' => $this->year->id,
             'enrollment_code' => 'ENR-' . $matricule, 'enrollment_date' => '2025-09-02',
-            'status' => 'paid',
+            'status' => 'ACTIVE',
         ]);
     }
 

@@ -53,7 +53,7 @@ class PromotionTest extends TestCase
         return Enrollment::create([
             'school_id' => $this->school->id, 'student_id' => $student->id, 'class_id' => $class->id,
             'academic_year_id' => $year->id, 'enrollment_code' => 'INS-' . $mat, 'enrollment_date' => '2024-09-02',
-            'status' => 'paid', 'academic_status' => $academic,
+            'status' => 'ACTIVE', 'academic_status' => $academic,
         ]);
     }
 
@@ -91,7 +91,7 @@ class PromotionTest extends TestCase
         Enrollment::create([
             'school_id' => $this->school->id, 'student_id' => $e->student_id, 'class_id' => $this->c2->id,
             'academic_year_id' => $this->y2->id, 'enrollment_code' => 'INS-EXIST', 'enrollment_date' => '2025-09-02',
-            'status' => 'paid', 'academic_status' => 'en_cours',
+            'status' => 'ACTIVE', 'academic_status' => 'en_cours',
         ]);
 
         $this->actingAs($this->admin())

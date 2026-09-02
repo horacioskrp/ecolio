@@ -39,7 +39,7 @@ class MarkController extends Controller
         // Élèves inscrits dans cette classe pour l'année active
         $enrollments = Enrollment::where('enrollments.class_id', $evaluation->classSubject->class_id)
             ->where('enrollments.academic_year_id', $activeYear?->id)
-            ->where('enrollments.status', 'active')
+            ->where('enrollments.status', Enrollment::STATUS_ACTIVE)
             ->join('students', 'students.id', '=', 'enrollments.student_id')
             ->orderBy('students.lastname')
             ->orderBy('students.firstname')
@@ -130,7 +130,7 @@ class MarkController extends Controller
 
         // Marquer l'évaluation comme terminée si toutes les notes sont saisies
         $totalEnrolled = Enrollment::where('class_id', $evaluation->classSubject->class_id)
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->count();
 
         $totalMarked = Mark::where('evaluation_id', $evaluation->id)
