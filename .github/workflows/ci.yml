@@ -95,8 +95,11 @@ jobs:
       - name: Installer les dépendances front
         run: npm ci
 
-      - name: Vérifier les types
-        run: npm run types
-
+      # Le build doit précéder le type-check : Wayfinder génère
+      # `resources/js/{actions,routes,wayfinder}` (gitignorés) pendant la
+      # compilation. Sans eux, tsc ne peut pas résoudre `@/routes`.
       - name: Compiler les assets
         run: npm run build
+
+      - name: Vérifier les types
+        run: npm run types
