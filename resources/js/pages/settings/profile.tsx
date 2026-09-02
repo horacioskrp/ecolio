@@ -13,6 +13,7 @@ import SettingsLayout from '@/layouts/settings/layout';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import type { BreadcrumbItem } from '@/types';
+import type { Auth } from '@/types/auth';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -28,7 +29,7 @@ export default function Profile({
     mustVerifyEmail: boolean;
     status?: string;
 }>) {
-    const { auth } = usePage().props;
+    const { auth } = usePage<{ auth: Auth }>().props;
 
     const initials = [auth.user.firstname?.[0], auth.user.lastname?.[0]]
         .filter(Boolean)
@@ -60,9 +61,9 @@ export default function Profile({
                                             {role}
                                         </span>
                                     ))}
-                                    {auth.user.matricule && (
+                                    {auth.user.natricule && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium text-gray-600 ring-1 ring-slate-200">
-                                            <IdCard className="h-3.5 w-3.5" /> {auth.user.matricule}
+                                            <IdCard className="h-3.5 w-3.5" /> {auth.user.natricule}
                                         </span>
                                     )}
                                 </div>
@@ -126,7 +127,7 @@ export default function Profile({
                                         </div>
                                     </div>
 
-                                    {auth.user.matricule && (
+                                    {auth.user.natricule && (
                                         <div className="space-y-2">
                                             <Label htmlFor="matricule" className="text-sm font-medium text-gray-900">
                                                 <IdCard className="w-4 h-4 inline mr-2" />
@@ -135,7 +136,7 @@ export default function Profile({
                                             <Input
                                                 id="matricule"
                                                 className="bg-gray-50 border-gray-200"
-                                                defaultValue={auth.user.matricule || ''}
+                                                defaultValue={auth.user.natricule || ''}
                                                 disabled
                                                 placeholder="Non attribué"
                                             />
