@@ -266,7 +266,7 @@ class ReportCardBuilder
     {
         $ids = Enrollment::where('class_id', $classId)
             ->when($yearId, fn ($q) => $q->where('academic_year_id', $yearId))
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->pluck('student_id');
 
         return Student::whereIn('id', $ids)

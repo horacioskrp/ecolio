@@ -25,7 +25,9 @@ class BackupController extends Controller
 
     private function authorizeAdmin(Request $request): void
     {
-        // Autorisation déléguée aux permissions (middleware can:* sur les routes).
+        // Socle de sécurité : les routes portent la permission fine (create/restore/
+        // delete_backups), mais aucun accès n'est possible sans le droit de lecture.
+        abort_unless($request->user()?->can('view_backups'), 403);
     }
 
     public function index(Request $request): Response

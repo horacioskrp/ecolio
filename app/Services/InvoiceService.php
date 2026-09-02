@@ -113,7 +113,7 @@ class InvoiceService
 
             $enrollment = $invoice->enrollment;
             if (in_array($invoice->fresh()->status, ['PARTIALLY_PAID', 'PAID'], true)) {
-                $enrollment->update(['status' => 'ACTIVE']);
+                $enrollment->update(['status' => Enrollment::STATUS_ACTIVE]);
             }
 
             return $payment->load('receipt');

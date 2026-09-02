@@ -17,7 +17,8 @@ class DocumentTagController extends Controller
 
     private function authorizeManage(Request $request): void
     {
-        // Autorisation déléguée aux permissions (middleware can:* sur les routes).
+        // Socle de sécurité (voir ArchiveController) : jamais d'accès sans le droit de lecture.
+        abort_unless($request->user()?->can('view_archives'), 403);
     }
 
     public function index(Request $request): Response

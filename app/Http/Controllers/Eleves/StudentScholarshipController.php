@@ -166,8 +166,11 @@ class StudentScholarshipController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(StudentScholarship $studentScholarship)
+    public function destroy(Request $request, StudentScholarship $studentScholarship)
     {
+        // Défense en profondeur : la route porte déjà `can:delete_student_scholarships`.
+        abort_unless($request->user()->can('delete_student_scholarships'), 403);
+
         $studentScholarship->delete();
 
         return redirect()->route('student-scholarships.index')

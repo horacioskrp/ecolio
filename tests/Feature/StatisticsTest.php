@@ -45,7 +45,7 @@ class StatisticsTest extends TestCase
         Enrollment::create([
             'school_id' => $this->school->id, 'student_id' => $s->id, 'class_id' => $this->class->id,
             'academic_year_id' => $this->year->id, 'enrollment_code' => 'E' . Str::random(8),
-            'enrollment_date' => now(), 'status' => 'active', 'academic_status' => $academicStatus,
+            'enrollment_date' => now(), 'status' => 'ACTIVE', 'academic_status' => $academicStatus,
         ]);
 
         return $s;

@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\AcademicYear;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Observers\AcademicYearObserver;
 use App\Observers\SchoolObserver;
 use App\Observers\StudentObserver;
 use App\Observers\UserObserver;
@@ -46,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
         User::observe(UserObserver::class);
         Student::observe(StudentObserver::class);
         School::observe(SchoolObserver::class);
+        AcademicYear::observe(AcademicYearObserver::class);
     }
 
     /**

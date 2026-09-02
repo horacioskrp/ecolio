@@ -27,7 +27,7 @@ class GradeController extends ApiController
         $year = AcademicYear::where('active', true)->first(['id', 'year']);
         $enrollment = Enrollment::where('student_id', $studentModel->id)
             ->when($year, fn ($q) => $q->where('academic_year_id', $year->id))
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->with('classroom:id,name,code,classroom_type_id')
             ->first();
 

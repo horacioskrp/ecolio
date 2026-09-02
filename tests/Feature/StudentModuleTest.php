@@ -57,7 +57,7 @@ class StudentModuleTest extends TestCase
         $enr = Enrollment::create([
             'school_id' => $school->id, 'student_id' => $student->id, 'class_id' => $c1->id,
             'academic_year_id' => $year->id, 'enrollment_code' => 'INS-010', 'enrollment_date' => '2025-09-02',
-            'status' => 'paid', 'academic_status' => 'en_cours',
+            'status' => 'ACTIVE', 'academic_status' => 'en_cours',
         ]);
 
         $this->actingAs($this->admin())
@@ -123,7 +123,7 @@ class StudentModuleTest extends TestCase
             Enrollment::create([
                 'school_id' => $school->id, 'student_id' => $s->id, 'class_id' => $c->id,
                 'academic_year_id' => $year->id, 'enrollment_code' => 'INS-' . $s->matricule,
-                'enrollment_date' => '2025-09-02', 'status' => 'paid', 'academic_status' => 'en_cours',
+                'enrollment_date' => '2025-09-02', 'status' => 'ACTIVE', 'academic_status' => 'en_cours',
             ]);
         }
 
