@@ -133,7 +133,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('fee-structures/{feeStructure}/installments', [\App\Http\Controllers\Parametres\InstallmentController::class, 'storeMultiple'])
         ->middleware('can:edit_fee_structures')->name('fee-structures.installments.store-multiple');
     Route::resource('scholarships', ScholarshipController::class)->middleware('can:view_scholarships');
-    Route::resource('student-scholarships', StudentScholarshipController::class)->middleware('can:view_student_scholarships');
+    Route::resource('student-scholarships', StudentScholarshipController::class)
+        ->middleware('can:view_student_scholarships')
+        ->middlewareFor(['create', 'store'], 'can:create_student_scholarships')
+        ->middlewareFor(['edit', 'update'], 'can:edit_student_scholarships')
+        ->middlewareFor('destroy', 'can:delete_student_scholarships');
     Route::post('students/bulk-status', [StudentController::class, 'bulkStatus'])
         ->name('students.bulk-status');
     // Statistiques élèves
@@ -163,7 +167,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('students.photo.upload');
     Route::delete('students/{student}/photo', [StudentController::class, 'deletePhoto'])
         ->name('students.photo.delete');
-    Route::resource('students', StudentController::class)->middleware('can:view_students');
+    Route::resource('students', StudentController::class)
+        ->middleware('can:view_students')
+        ->middlewareFor(['create', 'store'], 'can:create_students')
+        ->middlewareFor(['edit', 'update'], 'can:edit_students')
+        ->middlewareFor('destroy', 'can:delete_students');
     Route::get('accounting', [AccountingController::class, 'index'])->middleware('can:view_finances')->name('accounting.index');
     Route::get('accounting/transactions', [TransactionController::class, 'index'])->middleware('can:view_transactions')->name('accounting.transactions');
     Route::get('accounting/situation', [SituationController::class, 'index'])->middleware('can:view_finances')->name('accounting.situation');
@@ -221,7 +229,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('pay-runs/{payRun}/pay', [PayRunController::class, 'pay'])->middleware('can:pay_payroll')->name('pay-runs.pay');
     Route::post('pay-runs/{payRun}/cancel', [PayRunController::class, 'cancel'])->middleware('can:cancel_payroll')->name('pay-runs.cancel');
     Route::delete('pay-runs/{payRun}', [PayRunController::class, 'destroy'])->middleware('can:delete_payroll')->name('pay-runs.destroy');
-    Route::resource('enrollments', EnrollmentController::class)->middleware('can:view_enrollments');
+    // Une permission par verbe : `can:view_*` seul laisserait créer/modifier/supprimer.
+    Route::resource('enrollments', EnrollmentController::class)
+        ->middleware('can:view_enrollments')
+        ->middlewareFor(['create', 'store'], 'can:create_enrollments')
+        ->middlewareFor(['edit', 'update'], 'can:edit_enrollments')
+        ->middlewareFor('destroy', 'can:delete_enrollments');
     Route::get('enrollments/{enrollment}/invoice', [InvoiceController::class, 'show'])->middleware('can:view_invoices')->name('enrollments.invoice');
     Route::post('enrollments/{enrollment}/payments', [InvoiceController::class, 'storePayment'])->middleware('can:create_invoices')->name('enrollments.payments.store');
     Route::get('payments/{payment}/receipt', [InvoiceController::class, 'receipt'])->middleware('can:view_invoices')->name('payments.receipt');

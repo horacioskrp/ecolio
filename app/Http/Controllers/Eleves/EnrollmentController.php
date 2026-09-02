@@ -205,8 +205,11 @@ class EnrollmentController extends Controller
             ->with('success', 'Inscription mise à jour avec succès.');
     }
 
-    public function destroy(Enrollment $enrollment): RedirectResponse
+    public function destroy(Request $request, Enrollment $enrollment): RedirectResponse
     {
+        // Défense en profondeur : la route porte déjà `can:delete_enrollments`.
+        abort_unless($request->user()->can('delete_enrollments'), 403);
+
         $enrollment->delete();
 
         return redirect()->route('enrollments.index')
