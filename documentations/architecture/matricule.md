@@ -389,25 +389,6 @@ php artisan matricule:generate-user --user-id=1 --force
 
 ## 📞 Support
 
-Pour toutes les questions ou problèmes:
+Pour toute question : ouvrez une issue sur [le dépôt GitHub](https://github.com/wearedalibi/dalibi/issues).
 
-- Consultez la documentation complète: [MATRICULE_SERVICE.md](MATRICULE_SERVICE.md)
-- Ouvrez une issue sur GitHub
-- Contactez: support@ecoliotogo.tg
-
-## 📜 Changelog
-
-### Version 1.0.0
-
-- ✅ Service principal MatriculeService
-- ✅ Trait HasMatricule pour auto-génération
-- ✅ Commandes Artisan pour batch generation
-- ✅ Observers pour tracking
-- ✅ Validation Rules
-- ✅ Configuration centralisée
-- ✅ Tests complets
-- ✅ Documentation
-
-## 📄 License
-
-Spécifiez votre license (MIT, Apache 2.0, etc.)
+Voir aussi : [Rôles & permissions](../administration/roles-permissions.md) — préfixe de matricule d'un rôle personnalisé.
