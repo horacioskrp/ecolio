@@ -16,6 +16,13 @@ class DefaultUsersSeeder extends Seeder
 
     public function run(): void
     {
+        // Garde-fou : ces comptes utilisent un mot de passe connu, jamais en production.
+        if (app()->environment('production')) {
+            $this->command?->warn('DefaultUsersSeeder ignoré : comptes de démonstration interdits en production.');
+
+            return;
+        }
+
         // École par défaut (dépendance des seeders de classes)
         if (! School::query()->exists()) {
             School::create([
@@ -44,12 +51,14 @@ class DefaultUsersSeeder extends Seeder
             $user = User::updateOrCreate(
                 ['email' => $email],
                 [
-                    'firstname'         => $firstname,
-                    'lastname'          => $lastname,
-                    'gender'            => 'female',
-                    'password'          => self::PASSWORD,
-                    'is_demo'           => true,
-                    'email_verified_at' => Carbon::now(),
+                    'firstname'            => $firstname,
+                    'lastname'             => $lastname,
+                    'gender'               => 'female',
+                    'password'             => self::PASSWORD,
+                    'is_demo'              => true,
+                    // Mot de passe connu : l'utilisateur doit en choisir un à la 1re connexion.
+                    'must_change_password' => true,
+                    'email_verified_at'    => Carbon::now(),
                 ],
             );
 
@@ -65,6 +74,9 @@ class DefaultUsersSeeder extends Seeder
             $this->command?->info("• {$email} ({$role})");
         }
 
-        $this->command?->warn('Comptes de démonstration créés — mot de passe : "' . self::PASSWORD . '". À CHANGER en production.');
+        $this->command?->warn(
+            'Comptes de démonstration créés — mot de passe : "' . self::PASSWORD . '". '
+            . 'Un changement de mot de passe sera exigé à la première connexion.'
+        );
     }
 }

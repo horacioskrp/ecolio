@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Observers\SchoolObserver;
 use App\Observers\StudentObserver;
 use App\Observers\UserObserver;
 use Carbon\CarbonImmutable;
@@ -43,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
     {
         User::observe(UserObserver::class);
         Student::observe(StudentObserver::class);
+        School::observe(SchoolObserver::class);
     }
 
     /**

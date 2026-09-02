@@ -43,6 +43,9 @@ class BulletinTemplateTest extends TestCase
         $this->seed(RolesAndPermissionsSeeder::class);
 
         $this->school = School::factory()->create();
+        // Ces tests pilotent explicitement la résolution des modèles : on repart du
+        // modèle par défaut provisionné à la création de l'école.
+        BulletinTemplate::where('school_id', $this->school->id)->delete();
         $this->year   = AcademicYear::create(['year' => '2025-2026', 'start_date' => '2025-09-01', 'end_date' => '2026-07-31', 'active' => true]);
         $this->type   = ClassroomType::factory()->create(['period_system' => 'trimestre']);
         $this->class  = Classroom::factory()->create(['classroom_type_id' => $this->type->id]);
