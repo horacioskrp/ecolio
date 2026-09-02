@@ -53,7 +53,7 @@ jobs:
         run: php artisan test
 
   frontend:
-    name: Front (build)
+    name: Front (types & build)
     runs-on: ubuntu-latest
 
     steps:
@@ -95,8 +95,11 @@ jobs:
       - name: Installer les dépendances front
         run: npm ci
 
-      # `npm run types` n'est pas encore branché : 11 erreurs TypeScript
-      # préexistantes (dont des modules non installés) rendraient la CI rouge
-      # d'emblée. À activer une fois la dette résorbée.
+      # Le build doit précéder le type-check : Wayfinder génère
+      # `resources/js/{actions,routes,wayfinder}` (gitignorés) pendant la
+      # compilation. Sans eux, tsc ne peut pas résoudre `@/routes`.
       - name: Compiler les assets
         run: npm run build
+
+      - name: Vérifier les types
+        run: npm run types

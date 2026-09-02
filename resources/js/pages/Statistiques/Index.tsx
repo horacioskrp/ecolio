@@ -268,7 +268,7 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                         <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={BLUE} stopOpacity={0.35} /><stop offset="95%" stopColor={BLUE} stopOpacity={0} /></linearGradient></defs>
                                         <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                                         <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
-                                        <RTooltip formatter={(v: number) => money(Number(v))} />
+                                        <RTooltip formatter={(v) => money(Number(v))} />
                                         <Area type="monotone" dataKey="total" stroke={BLUE} strokeWidth={2} fill="url(#g)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -280,7 +280,7 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                             data={finance.by_method.map((m) => ({ ...m, method: methodLabel[m.method] ?? m.method }))}>
                                             {finance.by_method.map((_, i) => <Cell key={i} fill={[GREEN, BLUE, VIOLET, ORANGE, SLATE][i % 5]} />)}
                                         </Pie>
-                                        <RTooltip formatter={(v: number) => money(Number(v))} />
+                                        <RTooltip formatter={(v) => money(Number(v))} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </Card>

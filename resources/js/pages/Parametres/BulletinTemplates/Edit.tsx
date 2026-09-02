@@ -1,3 +1,4 @@
+import type { FormDataConvertible } from '@inertiajs/core';
 import { Head, router } from '@inertiajs/react';
 import { ArrowDown, ArrowUp, LayoutGrid, Plus, Save, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -8,14 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { route } from '@/helpers/route';
 import AppLayout from '@/layouts/app-layout';
 
-interface Column { key: string; label: string; width: number | string; type: string; source: string | null }
-interface Options {
+// Alias de type (et non `interface`) : seuls les alias reçoivent une signature
+// d'index implicite, indispensable pour envoyer ces objets dans une requête
+// Inertia (`FormDataConvertible`).
+type Column = { key: string; label: string; width: number | string; type: string; source: string | null };
+type Options = {
     show_class_stats?: boolean;
     nb_text?: string;
     signataire_titulaire?: string;
     signataire_chef?: string;
-    [k: string]: unknown;
-}
+    [k: string]: FormDataConvertible;
+};
 interface EvalType { id: string; name: string; category: string }
 interface Preset { name: string; columns: Column[]; options: Options }
 
