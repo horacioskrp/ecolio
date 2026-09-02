@@ -2,6 +2,10 @@
 
 Dalibi est un outil complet libre et open-source de gestion pour les établissements scolaires du Togo et d'Afrique (primaire, collège, lycée). Élèves, notes & bulletins, présences, examens officiels, comptabilité & écolage, emploi du temps, documents PDF, stockage local/S3 et sauvegardes planifiées
 
+## 📚 Documentation
+
+La documentation technique vit dans **[`documentations/`](documentations/README.md)** (prise en main, administration, exploitation, architecture). La référence de l'**API du portail** est à part, dans [`docs/api/`](docs/api/README.md).
+
 ## 🛠️ Stack technique
 
 - **Backend** : Laravel 12, PHP 8.3+
@@ -10,7 +14,7 @@ Dalibi est un outil complet libre et open-source de gestion pour les établissem
 - **Base de données** : PostgreSQL 12+
 - **Auth** : Laravel Sanctum + 2FA, Spatie Laravel Permission
 - **Files d'attente** : e-mails et sauvegardes manuelles traités en arrière-plan (worker)
-- **Observabilité** (optionnelle) : logs JSON pour Loki/Grafana + capture d'exceptions Sentry/GlitchTip — voir [`documentations/OBSERVABILITY.md`](documentations/OBSERVABILITY.md)
+- **Observabilité** (optionnelle) : logs JSON pour Loki/Grafana + capture d'exceptions Sentry/GlitchTip — voir [`documentations/exploitation/observabilite.md`](documentations/exploitation/observabilite.md)
 
 ## 🎓 Fonctionnalités
 

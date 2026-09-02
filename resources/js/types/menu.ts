@@ -140,5 +140,8 @@ export const mainNavItems: NavItem[] = [
         title: 'Mon compte',
         href: '/settings/profile',
         icon: UserCircle,
+        // Les réglages du compte n'ont pas de préfixe commun exclusif : sans ces
+        // chemins, l'entrée s'éteindrait sur Mot de passe, 2FA ou Apparence.
+        match: ['/settings/password', '/settings/two-factor', '/settings/appearance'],
     },
 ];
