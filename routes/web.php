@@ -74,7 +74,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Statistiques
     Route::middleware('can:view_statistics')->prefix('statistiques')->name('statistics.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Statistics\StatisticsController::class, 'index'])->name('index');
-        Route::get('/{section}/export/{format}', [\App\Http\Controllers\Statistics\StatisticsController::class, 'export'])->name('export');
+        // `export_statistics` existe et est appliqué ailleurs (ex. roster.export) :
+        // sans ce garde, un rôle en lecture seule pourrait extraire les données.
+        Route::get('/{section}/export/{format}', [\App\Http\Controllers\Statistics\StatisticsController::class, 'export'])
+            ->middleware('can:export_statistics')->name('export');
     });
 
     // Application mono-école : pas de liste ni d'actions groupées, une seule école éditable.
