@@ -1,15 +1,16 @@
 import { Head, router } from '@inertiajs/react';
-import { useMoney } from '@/helpers/money';
 import { BarChart3, Download, FileSpreadsheet, GraduationCap, Layers, MapPin, PieChart as PieIcon, School, TrendingUp, UserCheck, Users, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import {
-    Area, AreaChart, Bar, BarChart, Cell, Legend, Line, LineChart, Pie, PieChart,
+    Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
     ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useMoney } from '@/helpers/money';
 import { route } from '@/helpers/route';
 import AppLayout from '@/layouts/app-layout';
+import { useChartTheme } from '@/lib/chart-theme';
 import type { BreadcrumbItem } from '@/types';
 
 /* ---------------- Types ---------------- */
@@ -78,7 +79,7 @@ interface Props {
 
 /* ---------------- Helpers ---------------- */
 const methodLabel: Record<string, string> = { CASH: 'Espèces', MOBILE_MONEY: 'Mobile Money', BANK_TRANSFER: 'Virement', CHEQUE: 'Chèque' };
-const BLUE = '#2563eb', PINK = '#db2777', GREEN = '#16a34a', ORANGE = '#ea580c', VIOLET = '#7c3aed', SLATE = '#94a3b8';
+
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Statistiques', href: '/statistiques' }];
 
@@ -112,6 +113,24 @@ function Card({ title, icon, children }: { title: string; icon?: React.ReactNode
 type Tab = 'effectifs' | 'finances' | 'reussite' | 'encadrement' | 'assiduite' | 'comparaisons' | 'geographie';
 
 export default function StatisticsIndex({ filters, academicYears, classes, enrollment, finance, success, resources, attendance, trends, geography }: Readonly<Props>) {
+    const theme = useChartTheme();
+    const [BLUE, ORANGE, GREEN, VIOLET] = theme.series;
+
+    // La couleur est portée par la catégorie elle-même : filtrer une catégorie
+    // vide ne doit jamais repeindre les autres.
+    const genderData = [
+        { name: 'Garçons', value: enrollment.gender.male, color: BLUE },
+        { name: 'Filles', value: enrollment.gender.female, color: ORANGE },
+        { name: 'Autre', value: enrollment.gender.other, color: GREEN },
+    ].filter((d) => d.value > 0);
+
+    // Donnée ordonnée (Passable → Très bien) : rampe séquentielle, pas des teintes sans rapport.
+    const mentionData = [
+        { name: 'Passable', value: success.mentions.passable },
+        { name: 'Assez bien', value: success.mentions.assez_bien },
+        { name: 'Bien', value: success.mentions.bien },
+        { name: 'Très bien', value: success.mentions.tres_bien },
+    ].map((d, i) => ({ ...d, color: theme.sequential[i] })).filter((d) => d.value > 0);
     const money = useMoney();
     const [tab, setTab] = useState<Tab>('effectifs');
 
@@ -197,22 +216,23 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             <div className="lg:col-span-2"><Card title="Effectifs par classe (garçons / filles)" icon={<Users className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
                                     <BarChart data={enrollment.by_class}>
-                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                                         <RTooltip />
                                         <Bar dataKey="male" name="Garçons" stackId="a" fill={BLUE} radius={[0, 0, 0, 0]} />
-                                        <Bar dataKey="female" name="Filles" stackId="a" fill={PINK} radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="female" name="Filles" stackId="a" fill={ORANGE} radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </Card></div>
                             <Card title="Répartition par sexe" icon={<PieIcon className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
                                     <PieChart>
-                                        <Pie dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}
-                                            data={[{ name: 'Garçons', value: enrollment.gender.male }, { name: 'Filles', value: enrollment.gender.female }, { name: 'Autre', value: enrollment.gender.other }].filter((d) => d.value > 0)}>
-                                            {[BLUE, PINK, SLATE].map((c) => <Cell key={c} fill={c} />)}
+                                        <Pie isAnimationActive={false} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}
+                                            data={genderData}>
+                                            {genderData.map((d) => <Cell key={d.name} fill={d.color} />)}
                                         </Pie>
-                                        <RTooltip />
+                                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </Card>
@@ -221,8 +241,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             <Card title="Pyramide des âges" icon={<BarChart3 className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={200}>
                                     <BarChart data={enrollment.age_distribution}>
-                                        <XAxis dataKey="age" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                                        <XAxis dataKey="age" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                                         <RTooltip />
                                         <Bar dataKey="total" name="Élèves" fill={VIOLET} radius={[4, 4, 0, 0]} />
                                     </BarChart>
@@ -266,22 +286,27 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                 <ResponsiveContainer width="100%" height={240}>
                                     <AreaChart data={finance.monthly}>
                                         <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={BLUE} stopOpacity={0.35} /><stop offset="95%" stopColor={BLUE} stopOpacity={0} /></linearGradient></defs>
-                                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
+                                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
                                         <RTooltip formatter={(v) => money(Number(v))} />
                                         <Area type="monotone" dataKey="total" stroke={BLUE} strokeWidth={2} fill="url(#g)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </Card></div>
                             <Card title="Modes de paiement" icon={<PieIcon className="w-4 h-4" />}>
+                                {/* Comparer des montants par catégorie est une magnitude, pas une identité :
+                                    des barres étiquetées en une seule teinte se lisent mieux qu'un camembert,
+                                    et l'identité ne repose plus sur la couleur. */}
                                 <ResponsiveContainer width="100%" height={240}>
-                                    <PieChart>
-                                        <Pie dataKey="total" nameKey="method" innerRadius={45} outerRadius={85} paddingAngle={2}
-                                            data={finance.by_method.map((m) => ({ ...m, method: methodLabel[m.method] ?? m.method }))}>
-                                            {finance.by_method.map((_, i) => <Cell key={i} fill={[GREEN, BLUE, VIOLET, ORANGE, SLATE][i % 5]} />)}
-                                        </Pie>
-                                        <RTooltip formatter={(v) => money(Number(v))} />
-                                    </PieChart>
+                                    <BarChart layout="vertical" data={finance.by_method.map((m) => ({ ...m, method: methodLabel[m.method] ?? m.method }))}
+                                        margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                        <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false}
+                                            tickFormatter={(v) => (Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}k` : String(v))} />
+                                        <YAxis type="category" dataKey="method" width={96} tick={{ fontSize: 12, fill: theme.axis }} axisLine={false} tickLine={false} />
+                                        <RTooltip formatter={(v) => money(Number(v))} contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
+                                        <Bar dataKey="total" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={26} />
+                                    </BarChart>
                                 </ResponsiveContainer>
                             </Card>
                         </div>
@@ -315,11 +340,11 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             <Card title="Répartition des mentions" icon={<PieIcon className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={240}>
                                     <PieChart>
-                                        <Pie dataKey="value" nameKey="name" innerRadius={50} outerRadius={88} paddingAngle={2}
-                                            data={[{ name: 'Passable', value: success.mentions.passable }, { name: 'Assez bien', value: success.mentions.assez_bien }, { name: 'Bien', value: success.mentions.bien }, { name: 'Très bien', value: success.mentions.tres_bien }].filter((d) => d.value > 0)}>
-                                            {[SLATE, BLUE, VIOLET, GREEN].map((c) => <Cell key={c} fill={c} />)}
+                                        <Pie isAnimationActive={false} dataKey="value" nameKey="name" innerRadius={50} outerRadius={88} paddingAngle={2} data={mentionData}>
+                                            {mentionData.map((d) => <Cell key={d.name} fill={d.color} />)}
                                         </Pie>
-                                        <RTooltip />
+                                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </Card>
@@ -355,8 +380,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                         <Card title="Effectif par classe (rouge = pléthorique)" icon={<Layers className="w-4 h-4" />}>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={resources.class_sizes}>
-                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
-                                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                                    <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                                     <RTooltip />
                                     <Bar dataKey="total" name="Élèves" radius={[4, 4, 0, 0]}>
                                         {resources.class_sizes.map((c, i) => <Cell key={i} fill={c.total > resources.threshold ? ORANGE : BLUE} />)}
@@ -398,8 +423,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                     <Card title="Présences par période" icon={<UserCheck className="w-4 h-4" />}>
                                         <ResponsiveContainer width="100%" height={260}>
                                             <BarChart data={attendance.by_period}>
-                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                                <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
                                                 <RTooltip />
                                                 <Bar dataKey="present" name="Présents" stackId="a" fill={GREEN} />
                                                 <Bar dataKey="absent" name="Absents" stackId="a" fill="#ef4444" />
@@ -442,8 +467,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             <Card title="Évolution de l'effectif" icon={<Users className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
                                     <LineChart data={trends.series}>
-                                        <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
+                                        <XAxis dataKey="year" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
                                         <RTooltip />
                                         <Line type="monotone" dataKey="effectif" name="Effectif" stroke={BLUE} strokeWidth={2.5} dot={{ r: 3 }} />
                                     </LineChart>
@@ -452,8 +477,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             <Card title="Évolution des taux (%)" icon={<TrendingUp className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
                                     <LineChart data={trends.series}>
-                                        <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={36} />
+                                        <XAxis dataKey="year" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} />
                                         <RTooltip />
                                         <Legend wrapperStyle={{ fontSize: 11 }} />
                                         <Line type="monotone" dataKey="recouvrement" name="Recouvrement" stroke={GREEN} strokeWidth={2} dot={{ r: 2 }} />
@@ -496,21 +521,23 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                         ) : (
                             <div className="grid lg:grid-cols-3 gap-5">
                                 <Card title="Par région" icon={<MapPin className="w-4 h-4" />}>
+                                    {/* Six régions dépassent ce qu'une palette catégorielle peut distinguer
+                                        de façon sûre : on passe en barres étiquetées, une seule teinte. */}
                                     <ResponsiveContainer width="100%" height={260}>
-                                        <PieChart>
-                                            <Pie dataKey="total" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2} data={geography.by_region}>
-                                                {geography.by_region.map((_, i) => <Cell key={i} fill={[BLUE, GREEN, VIOLET, ORANGE, PINK, SLATE][i % 6]} />)}
-                                            </Pie>
-                                            <RTooltip />
-                                            <Legend wrapperStyle={{ fontSize: 11 }} />
-                                        </PieChart>
+                                        <BarChart layout="vertical" data={geography.by_region} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                            <YAxis type="category" dataKey="name" width={104} tick={{ fontSize: 12, fill: theme.axis }} axisLine={false} tickLine={false} />
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
+                                            <Bar dataKey="total" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={22} />
+                                        </BarChart>
                                     </ResponsiveContainer>
                                 </Card>
                                 <div className="lg:col-span-2"><Card title="Top préfectures d'origine" icon={<BarChart3 className="w-4 h-4" />}>
                                     <ResponsiveContainer width="100%" height={280}>
                                         <BarChart data={geography.by_prefecture} layout="vertical" margin={{ left: 20 }}>
-                                            <XAxis type="number" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={90} />
+                                            <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={90} />
                                             <RTooltip />
                                             <Bar dataKey="total" name="Élèves" fill={BLUE} radius={[0, 4, 4, 0]} />
                                         </BarChart>

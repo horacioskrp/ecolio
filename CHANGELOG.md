@@ -4,6 +4,27 @@ Toutes les évolutions notables de **Dalibi** sont consignées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 respecte [SemVer](https://semver.org/lang/fr/).
 
+## [1.0.1] — 2026-09-02
+
+### Corrigé
+- **Couleur des catégories dans les graphiques** : la couleur suivait la *position*
+  dans le tableau et non la catégorie. Lorsqu'une catégorie vide était filtrée, les
+  suivantes changeaient de couleur — les filles pouvaient hériter du bleu des garçons,
+  « Très bien » perdre son vert.
+
+### Accessibilité
+- **Palette revue et validée** (bande de luminosité, chroma, séparation en vision
+  déficiente, contraste) dans les modes clair *et* sombre. L'ancien couple bleu/violet
+  était indistinguable en deutéranopie.
+- **Légendes ajoutées** aux camemberts qui n'en avaient pas : l'identité ne repose plus
+  sur la seule couleur.
+- Les répartitions à plus de trois catégories (modes de paiement, régions) passent en
+  **barres étiquetées** ; les mentions, données ordonnées, en **rampe séquentielle**.
+- **Mode sombre** : couleurs d'axes et de grille désormais adaptées au thème, au lieu de
+  valeurs claires codées en dur (la grille était quasi invisible sur fond sombre).
+- L'animation d'entrée des camemberts est retirée : elle laissait le graphique **vide**
+  lorsque les images d'animation sont ralenties (onglet en arrière-plan, économie
+  d'énergie, `prefers-reduced-motion`).
 ## [1.0.0] — 2026-09-02
 
 Première version stable. Dalibi couvre le cycle complet de gestion d'un établissement
@@ -59,4 +80,5 @@ scolaire, de l'inscription de l'élève au bulletin, en passant par l'écolage e
 Laravel 12 (PHP 8.3+), React 19 + TypeScript via Inertia.js, Tailwind CSS 4, PostgreSQL,
 identifiants UUID. **502 tests** automatisés.
 
+[1.0.1]: https://github.com/wearedalibi/dalibi/releases/tag/v1.0.1
 [1.0.0]: https://github.com/wearedalibi/dalibi/releases/tag/v1.0.0

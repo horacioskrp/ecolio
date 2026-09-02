@@ -1,18 +1,19 @@
 import { Head, router } from '@inertiajs/react';
-import { useMoney } from '@/helpers/money';
 import {
     TrendingUp, TrendingDown, Users, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, ChevronDown,
     Eye, BookOpen, Banknote, Filter, XCircle,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { route } from '@/helpers/route';
-import AppLayout from '@/layouts/app-layout';
 import { useState } from 'react';
 import {
     Bar, CartesianGrid, ComposedChart, Legend, Line,
     ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { Button } from '@/components/ui/button';
+import { useMoney } from '@/helpers/money';
+import { route } from '@/helpers/route';
+import AppLayout from '@/layouts/app-layout';
+import { useChartTheme } from '@/lib/chart-theme';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -166,6 +167,7 @@ function SectionHeader({ icon, title, count }: { icon: React.ReactNode; title: s
 export default function AccountingDashboard({
     academicYears, classrooms, filters, globalStats, monthlyPayments, byClass, studentsUnpaid, studentsUnpaidTotal,
 }: Readonly<DashboardProps>) {
+    const theme = useChartTheme();
     const fmt = useMoney();
     const [yearId,  setYearId]  = useState(filters.academic_year_id ?? '');
     const [classId, setClassId] = useState(filters.class_id ?? '');
@@ -332,16 +334,16 @@ export default function AccountingDashboard({
                         <div className="h-72 mt-4 -ml-2">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={chartData} margin={{ top: 10, right: 12, left: 4, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+                                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: theme.axis }} axisLine={false} tickLine={false} />
                                     <YAxis
-                                        tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={70}
+                                        tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={70}
                                         tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
                                     />
                                     <Tooltip
                                         formatter={(value, name) => [fmt(Number(value)), name === 'encaisse' ? 'Encaissé du mois' : 'Cumul encaissé']}
                                         labelFormatter={(_label, payload) => payload?.[0]?.payload?.fullLabel ?? ''}
-                                        contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 13 }}
+                                        contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle}
                                     />
                                     <Legend
                                         formatter={(value: string) =>
@@ -350,11 +352,11 @@ export default function AccountingDashboard({
                                         wrapperStyle={{ fontSize: 12 }}
                                     />
                                     {totalExpected > 0 && (
-                                        <ReferenceLine y={totalExpected} stroke="#f59e0b" strokeDasharray="5 5"
-                                            label={{ value: 'Attendu', position: 'right', fill: '#b45309', fontSize: 11 }} />
+                                        <ReferenceLine y={totalExpected} stroke={theme.status.warning} strokeDasharray="5 5"
+                                            label={{ value: 'Attendu', position: 'right', fill: theme.status.warning, fontSize: 11 }} />
                                     )}
-                                    <Bar dataKey="encaisse" name="encaisse" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={44} />
-                                    <Line type="monotone" dataKey="cumul" name="cumul" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
+                                    <Bar dataKey="encaisse" name="encaisse" fill={theme.primary} radius={[6, 6, 0, 0]} maxBarSize={44} />
+                                    <Line type="monotone" dataKey="cumul" name="cumul" stroke={theme.series[2]} strokeWidth={2.5} dot={{ r: 3 }} />
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
