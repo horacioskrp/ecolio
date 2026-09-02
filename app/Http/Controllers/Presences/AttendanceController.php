@@ -11,9 +11,11 @@ use App\Models\Attendance;
 use App\Models\AttendanceRecord;
 use App\Models\Classroom;
 use App\Models\Enrollment;
+use App\Models\SubjectAssignment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -103,6 +105,18 @@ class AttendanceController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $classId = $request->string('class_id')->toString();
+
+        $this->assertCanRecordFor($request, $classId);
+
+        // Seuls les élèves réellement inscrits (activement) dans cette classe peuvent
+        // être pointés : `exists:students,id` laisserait passer un élève d'une autre
+        // classe et fausserait les statistiques d'assiduité.
+        $enrolledIds = Enrollment::where('class_id', $classId)
+            ->where('status', Enrollment::STATUS_ACTIVE)
+            ->pluck('student_id')
+            ->all();
+
         $validated = $request->validate([
             'class_id'           => ['required', 'uuid', 'exists:classes,id'],
             'academic_period_id' => ['required', 'uuid', 'exists:academic_periods,id'],
@@ -110,10 +124,12 @@ class AttendanceController extends Controller
             'session'            => ['required', 'in:matin,apres-midi,journee'],
             'notes'              => ['nullable', 'string', 'max:1000'],
             'records'            => ['required', 'array', 'min:1'],
-            'records.*.student_id'   => ['required', 'uuid', 'exists:students,id'],
+            'records.*.student_id'   => ['required', 'uuid', Rule::in($enrolledIds)],
             'records.*.status'       => ['required', 'in:present,absent,late,excused'],
             'records.*.minutes_late' => ['nullable', 'integer', 'min:1', 'max:240'],
             'records.*.comment'      => ['nullable', 'string', 'max:300'],
+        ], [
+            'records.*.student_id.in' => "Cet élève n'est pas inscrit dans cette classe.",
         ]);
 
         DB::transaction(function () use ($validated, $request): void {
@@ -146,6 +162,28 @@ class AttendanceController extends Controller
         });
 
         return back()->with('message', 'Appel enregistré avec succès.');
+    }
+
+    /**
+     * Cloisonnement enseignant : qui porte des affectations est un enseignant et ne
+     * fait l'appel que dans SES classes (toutes matières confondues — l'appel n'est
+     * pas lié à une matière). Les profils sans affectation (administration, vie
+     * scolaire) restent transverses.
+     */
+    private function assertCanRecordFor(Request $request, string $classId): void
+    {
+        $userId = $request->user()->id;
+
+        if (! SubjectAssignment::where('teacher_id', $userId)->where('active', true)->exists()) {
+            return;
+        }
+
+        $assigned = SubjectAssignment::where('teacher_id', $userId)
+            ->where('class_id', $classId)
+            ->where('active', true)
+            ->exists();
+
+        abort_unless($assigned, 403, "Vous n'êtes pas affecté à cette classe.");
     }
 
     public function stats(Request $request): Response
