@@ -146,6 +146,13 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
+        // `edit_users` est détenu par le Secrétariat et la Direction. Sans ce garde-fou,
+        // ils pourraient réinitialiser le mot de passe d'un administrateur et prendre
+        // sa place : on aligne `update` sur la protection déjà appliquée à `destroy`.
+        if ($user->hasRole(Roles::ADMINISTRATOR) && ! auth()->user()->hasRole(Roles::ADMINISTRATOR)) {
+            abort(403, "Seul un administrateur peut modifier un compte administrateur.");
+        }
+
         $data = [
             'firstname'  => $request->validated('firstname'),
             'lastname'   => $request->validated('lastname'),
@@ -159,6 +166,13 @@ class UserController extends Controller
 
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->validated('password'));
+
+            // Mot de passe défini par un tiers : son titulaire doit en choisir un
+            // lui-même à la prochaine connexion (l'administrateur ne doit pas
+            // conserver un mot de passe qu'il connaît).
+            if ($user->id !== auth()->id()) {
+                $data['must_change_password'] = true;
+            }
         }
 
         $user->update($data);

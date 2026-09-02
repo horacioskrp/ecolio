@@ -182,7 +182,7 @@ class BulletinTemplateTest extends TestCase
         $s = Student::create(['user_id' => $u->id, 'matricule' => 'M' . Str::random(6), 'firstname' => 'P', 'lastname' => Str::random(5), 'gender' => 'male', 'birth_date' => '2010-01-01']);
         Enrollment::create([
             'school_id' => $this->school->id, 'student_id' => $s->id, 'class_id' => $this->class->id,
-            'academic_year_id' => $this->year->id, 'enrollment_code' => 'E' . Str::random(8), 'enrollment_date' => now(), 'status' => 'active',
+            'academic_year_id' => $this->year->id, 'enrollment_code' => 'E' . Str::random(8), 'enrollment_date' => now(), 'status' => 'ACTIVE',
         ]);
 
         return $s;

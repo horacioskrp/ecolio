@@ -42,10 +42,15 @@ class SubjectAssignmentTest extends TestCase
 
     private function assignment(array $overrides = []): SubjectAssignment
     {
+        // Une seule année peut être active : on réutilise celle en place plutôt
+        // que d'en créer une seconde (le défaut d'array_merge serait évalué même
+        // lorsqu'une année est fournie en override).
+        $overrides['academic_year_id'] ??= (AcademicYear::where('active', true)->first()
+            ?? $this->year('2025-2026', true))->id;
+
         return SubjectAssignment::create(array_merge([
             'subject_id'       => Subject::create(['name' => 'Maths ' . fake()->unique()->word(), 'code' => strtoupper(fake()->unique()->bothify('SUB##'))])->id,
             'teacher_id'       => User::factory()->create()->id,
-            'academic_year_id' => $this->year('2025-2026', true)->id,
             'class_id'         => Classroom::factory()->create()->id,
             'active'           => true,
         ], $overrides));

@@ -363,7 +363,9 @@ L'**entrypoint** attend la base de données, met en cache config/vues, puis migr
 | `SEED_PERMISSIONS=true` | **Rôles & permissions** uniquement |
 | `SEED_DATABASE=true` | **Seed global** (`DatabaseSeeder`) : référence **+ données de démo** (comptes de test, élèves fictifs) — _démo/staging uniquement_ |
 
-Les **données de référence** (`ReferenceDataSeeder`) sont **idempotentes** : rôles & permissions, niveaux, types de classes, **classes** (PS → Terminale), matières, catégories de frais, types d'évaluation, bourses, tags d'archivage, en-tête & modèle de bulletin par défaut. Les **modèles de documents** nécessitent une école : créez votre établissement puis lancez `php artisan db:seed --class=DocumentTemplateSeeder`.
+> 🔒 Les seeders de **démonstration** (`DefaultUsersSeeder`, `StudentTestSeeder`) sont **automatiquement ignorés** lorsque `APP_ENV=production`, y compris avec `--force` : un `db:seed` en production n'installe que les données de référence. Les comptes de démonstration imposent par ailleurs un **changement de mot de passe à la première connexion**.
+
+Les **données de référence** (`ReferenceDataSeeder`) sont **idempotentes** : rôles & permissions, niveaux, types de classes, **classes** (PS → Terminale), matières, catégories de frais, types d'évaluation, bourses et tags d'archivage. L'**en-tête des documents** et le **modèle de bulletin** sont provisionnés **automatiquement à la création d'un établissement**. Les **modèles de documents** nécessitent une école : créez votre établissement puis lancez `php artisan db:seed --class=DocumentTemplateSeeder`.
 
 ### Sous Kubernetes
 
@@ -451,6 +453,11 @@ Ces comptes sont marqués `is_demo = true` : une **bannière d'avertissement** s
 - Two-Factor Authentication (2FA)
 - UUIDs pour toutes les clés primaires
 - Gestion des rôles et permissions via Spatie Laravel Permission
+- **Une permission par verbe** sur chaque route : une permission de lecture (`view_*`) ne permet jamais de créer, modifier ou supprimer
+- **Cloisonnement enseignant** : un professeur ne saisit notes et appels que dans les classes où il est affecté
+- **Contrôle d'appartenance** : on ne note ni ne pointe qu'un élève réellement inscrit dans la classe visée
+- **Écritures financières protégées** : gardes anti trop-perçu et transitions du cycle de paie évaluées **sous verrou** (pas de double encaissement ni de double décaissement) ; une inscription portant des paiements ne peut pas être supprimée
+- **Comptes à privilèges** : seul un administrateur peut modifier ou supprimer un compte administrateur ; un mot de passe défini par un tiers doit être changé à la première connexion
 - Protection CSRF (Inertia)
 - Validation stricte de toutes les entrées
 - Credentials de stockage S3 chiffrés au repos (`APP_KEY`)

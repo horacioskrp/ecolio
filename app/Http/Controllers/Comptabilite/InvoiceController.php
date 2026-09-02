@@ -7,11 +7,13 @@ use App\Constants\Roles;
 use App\Http\Requests\StorePaymentRequest;
 use App\Models\CashAccount;
 use App\Models\Enrollment;
+use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\InvoiceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,16 +61,21 @@ class InvoiceController extends Controller
         $data = $request->validated();
         $data['created_by'] = auth()->id();
 
-        // Garde anti trop-perçu : le paiement ne peut excéder le reste dû
-        $remaining = (float) $invoice->amount_remaining;
-        if ((float) $data['amount'] > $remaining + 0.001) {
-            return back()->withErrors([
-                'amount' => 'Le montant dépasse le reste à payer (' . number_format($remaining, 0, ',', ' ') . ' F).',
-            ]);
-        }
-
+        // Garde anti trop-perçu, évaluée SOUS VERROU : sans cela, deux requêtes
+        // concurrentes (double-clic, deux caissiers) liraient le même reste dû et
+        // passeraient toutes les deux — le trop-perçu étant ensuite masqué par le
+        // `max(0, …)` de `recalculate()`.
         DB::transaction(function () use ($data, $invoice): void {
-            $this->invoiceService->recordPayment($invoice, $data);
+            $locked = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            $remaining = (float) $locked->amount_remaining;
+            if ((float) $data['amount'] > $remaining + 0.001) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Le montant dépasse le reste à payer (' . number_format($remaining, 0, ',', ' ') . ' F).',
+                ]);
+            }
+
+            $this->invoiceService->recordPayment($locked, $data);
         });
 
         return redirect()->route('enrollments.invoice', $enrollment->id)

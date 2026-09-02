@@ -250,11 +250,13 @@ class PayrollService
     /** Valide le cycle (brouillon → validé). */
     public function validate(PayRun $run): PayRun
     {
-        $this->assertStatus($run, [PayRun::DRAFT]);
+        return DB::transaction(function () use ($run): PayRun {
+            $locked = $this->lockAndAssert($run, [PayRun::DRAFT]);
 
-        $run->update(['status' => PayRun::VALIDATED, 'validated_at' => now()]);
+            $locked->update(['status' => PayRun::VALIDATED, 'validated_at' => now()]);
 
-        return $run->fresh();
+            return $locked->fresh();
+        });
     }
 
     /**
@@ -263,23 +265,23 @@ class PayrollService
      */
     public function pay(PayRun $run, string $cashAccountId): PayRun
     {
-        $this->assertStatus($run, [PayRun::VALIDATED]);
-
         return DB::transaction(function () use ($run, $cashAccountId): PayRun {
-            $run->load('payslips');
-            $periodLabel = $run->periodLabel();
+            $locked = $this->lockAndAssert($run, [PayRun::VALIDATED]);
 
-            foreach ($run->payslips as $payslip) {
+            $locked->load('payslips');
+            $periodLabel = $locked->periodLabel();
+
+            foreach ($locked->payslips as $payslip) {
                 $this->accountingService->recordPayrollTransaction($payslip, $cashAccountId, $periodLabel);
             }
 
-            $run->update([
+            $locked->update([
                 'status'          => PayRun::PAID,
                 'paid_at'         => now(),
                 'cash_account_id' => $cashAccountId,
             ]);
 
-            return $run->fresh();
+            return $locked->fresh();
         });
     }
 
@@ -289,19 +291,19 @@ class PayrollService
      */
     public function cancel(PayRun $run): PayRun
     {
-        $this->assertStatus($run, [PayRun::DRAFT, PayRun::VALIDATED, PayRun::PAID]);
-
         return DB::transaction(function () use ($run): PayRun {
-            if ($run->status === PayRun::PAID) {
-                $run->load('payslips');
-                foreach ($run->payslips as $payslip) {
+            $locked = $this->lockAndAssert($run, [PayRun::DRAFT, PayRun::VALIDATED, PayRun::PAID]);
+
+            if ($locked->status === PayRun::PAID) {
+                $locked->load('payslips');
+                foreach ($locked->payslips as $payslip) {
                     $this->accountingService->cancelPayrollTransaction($payslip);
                 }
             }
 
-            $run->update(['status' => PayRun::CANCELLED]);
+            $locked->update(['status' => PayRun::CANCELLED]);
 
-            return $run->fresh();
+            return $locked->fresh();
         });
     }
 
@@ -313,18 +315,20 @@ class PayrollService
     public function delete(PayRun $run): void
     {
         DB::transaction(function () use ($run): void {
-            $run->load('payslips');
+            // Verrou : évite qu'une suppression concurrente recrédite deux fois la caisse.
+            $locked = PayRun::whereKey($run->id)->lockForUpdate()->firstOrFail();
+            $locked->load('payslips');
 
-            if ($run->status === PayRun::PAID) {
-                foreach ($run->payslips as $payslip) {
+            if ($locked->status === PayRun::PAID) {
+                foreach ($locked->payslips as $payslip) {
                     $this->accountingService->cancelPayrollTransaction($payslip);
                 }
             }
 
             // Suppression explicite des bulletins (portable : ne dépend pas du
             // cascade FK, non appliqué sous SQLite en test).
-            $run->payslips()->delete();
-            $run->delete();
+            $locked->payslips()->delete();
+            $locked->delete();
         });
     }
 
@@ -387,6 +391,22 @@ class PayrollService
             'total_deductions' => (float) $sums->d,
             'total_net'        => (float) $sums->n,
         ]);
+    }
+
+    /**
+     * Recharge le cycle SOUS VERROU puis vérifie son statut.
+     *
+     * À appeler impérativement dans une transaction : sans verrou, deux requêtes
+     * concurrentes (double-clic sur « Payer ») liraient toutes deux le statut
+     * « validé » et décaisseraient deux fois.
+     */
+    private function lockAndAssert(PayRun $run, array $allowed): PayRun
+    {
+        $locked = PayRun::whereKey($run->id)->lockForUpdate()->firstOrFail();
+
+        $this->assertStatus($locked, $allowed);
+
+        return $locked;
     }
 
     private function assertStatus(PayRun $run, array $allowed): void

@@ -74,30 +74,62 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Statistiques
     Route::middleware('can:view_statistics')->prefix('statistiques')->name('statistics.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Statistics\StatisticsController::class, 'index'])->name('index');
-        Route::get('/{section}/export/{format}', [\App\Http\Controllers\Statistics\StatisticsController::class, 'export'])->name('export');
+        // `export_statistics` existe et est appliqué ailleurs (ex. roster.export) :
+        // sans ce garde, un rôle en lecture seule pourrait extraire les données.
+        Route::get('/{section}/export/{format}', [\App\Http\Controllers\Statistics\StatisticsController::class, 'export'])
+            ->middleware('can:export_statistics')->name('export');
     });
 
     // Application mono-école : pas de liste ni d'actions groupées, une seule école éditable.
     Route::resource('schools', SchoolController::class)
         ->except(['destroy'])
-        ->middleware('can:view_schools');
-    Route::resource('classrooms', ClassroomController::class)->middleware('can:view_classes');
+        ->middleware('can:view_schools')
+        ->middlewareFor(['create', 'store'], 'can:create_schools')
+        ->middlewareFor(['edit', 'update'], 'can:edit_schools');
+    Route::resource('classrooms', ClassroomController::class)
+        ->middleware('can:view_classes')
+        ->middlewareFor(['create', 'store'], 'can:create_classes')
+        ->middlewareFor(['edit', 'update'], 'can:edit_classes')
+        ->middlewareFor('destroy', 'can:delete_classes');
     Route::get('classrooms/{classroom}/subject-assignments', [ClassroomSubjectAssignmentController::class, 'create'])
         ->middleware('can:view_subject_assignments')->name('classrooms.subject-assignments.create');
     Route::post('classrooms/{classroom}/subject-assignments', [ClassroomSubjectAssignmentController::class, 'store'])
         ->middleware('can:create_subject_assignments')->name('classrooms.subject-assignments.store');
-    Route::resource('classroom-types', ClassroomTypeController::class)->middleware('can:view_classroom_types');
-    Route::resource('subjects', SubjectController::class)->middleware('can:view_subjects');
-    Route::resource('countries', CountryController::class)->middleware('can:view_countries');
-    Route::resource('evaluation-types', EvaluationTypeController::class)->middleware('can:view_evaluation_types');
+    Route::resource('classroom-types', ClassroomTypeController::class)
+        ->middleware('can:view_classroom_types')
+        ->middlewareFor(['create', 'store'], 'can:create_classroom_types')
+        ->middlewareFor(['edit', 'update'], 'can:edit_classroom_types')
+        ->middlewareFor('destroy', 'can:delete_classroom_types');
+    Route::resource('subjects', SubjectController::class)
+        ->middleware('can:view_subjects')
+        ->middlewareFor(['create', 'store'], 'can:create_subjects')
+        ->middlewareFor(['edit', 'update'], 'can:edit_subjects')
+        ->middlewareFor('destroy', 'can:delete_subjects');
+    Route::resource('countries', CountryController::class)
+        ->middleware('can:view_countries')
+        ->middlewareFor(['create', 'store'], 'can:create_countries')
+        ->middlewareFor(['edit', 'update'], 'can:edit_countries')
+        ->middlewareFor('destroy', 'can:delete_countries');
+    Route::resource('evaluation-types', EvaluationTypeController::class)
+        ->middleware('can:view_evaluation_types')
+        ->middlewareFor(['create', 'store'], 'can:create_evaluation_types')
+        ->middlewareFor(['edit', 'update'], 'can:edit_evaluation_types')
+        ->middlewareFor('destroy', 'can:delete_evaluation_types');
 
     // Modèles d'évaluation (global)
-    Route::resource('evaluation-templates', EvaluationTemplateController::class)->middleware('can:view_evaluation_templates');
+    Route::resource('evaluation-templates', EvaluationTemplateController::class)
+        ->middleware('can:view_evaluation_templates')
+        ->middlewareFor(['create', 'store'], 'can:create_evaluation_templates')
+        ->middlewareFor(['edit', 'update'], 'can:edit_evaluation_templates')
+        ->middlewareFor('destroy', 'can:delete_evaluation_templates');
     Route::post('evaluation-templates/{evaluationTemplate}/generate', [EvaluationTemplateController::class, 'generate'])
         ->middleware('can:generate_evaluation_templates')->name('evaluation-templates.generate');
 
     // Évaluations par classe/matière
-    Route::resource('evaluations', EvaluationController::class)->only(['index', 'show', 'destroy'])->middleware('can:view_evaluations');
+    Route::resource('evaluations', EvaluationController::class)
+        ->only(['index', 'show', 'destroy'])
+        ->middleware('can:view_evaluations')
+        ->middlewareFor('destroy', 'can:delete_evaluations');
     Route::patch('evaluations/{evaluation}/status', [EvaluationController::class, 'updateStatus'])
         ->middleware('can:edit_evaluations')->name('evaluations.update-status');
     Route::patch('evaluations/{evaluation}/lock', [EvaluationController::class, 'toggleLock'])
@@ -116,24 +148,56 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('evaluations/{evaluation}/marks', [MarkController::class, 'store'])->middleware('can:create_marks')->name('marks.store');
 
     // Réclamations de notes
-    Route::resource('note-reclamations', NoteReclamationController::class)->only(['index', 'create', 'store', 'show'])->middleware('can:view_note_reclamations');
+    Route::resource('note-reclamations', NoteReclamationController::class)
+        ->only(['index', 'create', 'store', 'show'])
+        ->middleware('can:view_note_reclamations')
+        ->middlewareFor(['create', 'store'], 'can:create_note_reclamations');
     Route::patch('note-reclamations/{noteReclamation}/review', [NoteReclamationController::class, 'review'])
         ->middleware('can:review_note_reclamations')->name('note-reclamations.review');
 
     // Configurations de calcul des moyennes
-    Route::resource('grading-configs', GradingConfigController::class)->except(['show'])->middleware('can:view_grading_configs');
+    Route::resource('grading-configs', GradingConfigController::class)
+        ->except(['show'])
+        ->middleware('can:view_grading_configs')
+        ->middlewareFor(['create', 'store'], 'can:create_grading_configs')
+        ->middlewareFor(['edit', 'update'], 'can:edit_grading_configs')
+        ->middlewareFor('destroy', 'can:delete_grading_configs');
     Route::patch('grading-configs/{gradingConfig}/activate', [GradingConfigController::class, 'activate'])
         ->middleware('can:edit_grading_configs')->name('grading-configs.activate');
-    Route::resource('academic-years', AcademicYearController::class)->middleware('can:view_academic_years');
-    Route::resource('academic-periods', AcademicPeriodController::class)->middleware('can:view_academic_periods');
-    Route::resource('fee-categories', FeeCategorieController::class)->middleware('can:view_fee_categories');
+    Route::resource('academic-years', AcademicYearController::class)
+        ->middleware('can:view_academic_years')
+        ->middlewareFor(['create', 'store'], 'can:create_academic_years')
+        ->middlewareFor(['edit', 'update'], 'can:edit_academic_years')
+        ->middlewareFor('destroy', 'can:delete_academic_years');
+    Route::resource('academic-periods', AcademicPeriodController::class)
+        ->middleware('can:view_academic_periods')
+        ->middlewareFor(['create', 'store'], 'can:create_academic_periods')
+        ->middlewareFor(['edit', 'update'], 'can:edit_academic_periods')
+        ->middlewareFor('destroy', 'can:delete_academic_periods');
+    Route::resource('fee-categories', FeeCategorieController::class)
+        ->middleware('can:view_fee_categories')
+        ->middlewareFor(['create', 'store'], 'can:create_fee_categories')
+        ->middlewareFor(['edit', 'update'], 'can:edit_fee_categories')
+        ->middlewareFor('destroy', 'can:delete_fee_categories');
     Route::post('fee-structures/replicate', [FeeStructureController::class, 'replicate'])
         ->middleware('can:create_fee_structures')->name('fee-structures.replicate');
-    Route::resource('fee-structures', FeeStructureController::class)->middleware('can:view_fee_structures');
+    Route::resource('fee-structures', FeeStructureController::class)
+        ->middleware('can:view_fee_structures')
+        ->middlewareFor(['create', 'store'], 'can:create_fee_structures')
+        ->middlewareFor(['edit', 'update'], 'can:edit_fee_structures')
+        ->middlewareFor('destroy', 'can:delete_fee_structures');
     Route::post('fee-structures/{feeStructure}/installments', [\App\Http\Controllers\Parametres\InstallmentController::class, 'storeMultiple'])
         ->middleware('can:edit_fee_structures')->name('fee-structures.installments.store-multiple');
-    Route::resource('scholarships', ScholarshipController::class)->middleware('can:view_scholarships');
-    Route::resource('student-scholarships', StudentScholarshipController::class)->middleware('can:view_student_scholarships');
+    Route::resource('scholarships', ScholarshipController::class)
+        ->middleware('can:view_scholarships')
+        ->middlewareFor(['create', 'store'], 'can:create_scholarships')
+        ->middlewareFor(['edit', 'update'], 'can:edit_scholarships')
+        ->middlewareFor('destroy', 'can:delete_scholarships');
+    Route::resource('student-scholarships', StudentScholarshipController::class)
+        ->middleware('can:view_student_scholarships')
+        ->middlewareFor(['create', 'store'], 'can:create_student_scholarships')
+        ->middlewareFor(['edit', 'update'], 'can:edit_student_scholarships')
+        ->middlewareFor('destroy', 'can:delete_student_scholarships');
     Route::post('students/bulk-status', [StudentController::class, 'bulkStatus'])
         ->name('students.bulk-status');
     // Statistiques élèves
@@ -163,7 +227,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('students.photo.upload');
     Route::delete('students/{student}/photo', [StudentController::class, 'deletePhoto'])
         ->name('students.photo.delete');
-    Route::resource('students', StudentController::class)->middleware('can:view_students');
+    Route::resource('students', StudentController::class)
+        ->middleware('can:view_students')
+        ->middlewareFor(['create', 'store'], 'can:create_students')
+        ->middlewareFor(['edit', 'update'], 'can:edit_students')
+        ->middlewareFor('destroy', 'can:delete_students');
     Route::get('accounting', [AccountingController::class, 'index'])->middleware('can:view_finances')->name('accounting.index');
     Route::get('accounting/transactions', [TransactionController::class, 'index'])->middleware('can:view_transactions')->name('accounting.transactions');
     Route::get('accounting/situation', [SituationController::class, 'index'])->middleware('can:view_finances')->name('accounting.situation');
@@ -221,20 +289,33 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('pay-runs/{payRun}/pay', [PayRunController::class, 'pay'])->middleware('can:pay_payroll')->name('pay-runs.pay');
     Route::post('pay-runs/{payRun}/cancel', [PayRunController::class, 'cancel'])->middleware('can:cancel_payroll')->name('pay-runs.cancel');
     Route::delete('pay-runs/{payRun}', [PayRunController::class, 'destroy'])->middleware('can:delete_payroll')->name('pay-runs.destroy');
-    Route::resource('enrollments', EnrollmentController::class)->middleware('can:view_enrollments');
+    // Une permission par verbe : `can:view_*` seul laisserait créer/modifier/supprimer.
+    Route::resource('enrollments', EnrollmentController::class)
+        ->middleware('can:view_enrollments')
+        ->middlewareFor(['create', 'store'], 'can:create_enrollments')
+        ->middlewareFor(['edit', 'update'], 'can:edit_enrollments')
+        ->middlewareFor('destroy', 'can:delete_enrollments');
     Route::get('enrollments/{enrollment}/invoice', [InvoiceController::class, 'show'])->middleware('can:view_invoices')->name('enrollments.invoice');
     Route::post('enrollments/{enrollment}/payments', [InvoiceController::class, 'storePayment'])->middleware('can:create_invoices')->name('enrollments.payments.store');
     Route::get('payments/{payment}/receipt', [InvoiceController::class, 'receipt'])->middleware('can:view_invoices')->name('payments.receipt');
     Route::get('receipts/verify', [InvoiceController::class, 'verifyReceipt'])
         ->middleware('throttle:30,1')
         ->name('receipts.verify');
-    Route::resource('subject-assignments', SubjectAssignmentController::class)->middleware('can:view_subject_assignments');
+    Route::resource('subject-assignments', SubjectAssignmentController::class)
+        ->middleware('can:view_subject_assignments')
+        ->middlewareFor(['create', 'store'], 'can:create_subject_assignments')
+        ->middlewareFor(['edit', 'update'], 'can:edit_subject_assignments')
+        ->middlewareFor('destroy', 'can:delete_subject_assignments');
 
     // Présences & Permissions
     Route::get('attendances', [AttendanceController::class, 'index'])->middleware('can:view_attendances')->name('attendances.index');
     Route::post('attendances', [AttendanceController::class, 'store'])->middleware('can:create_attendances')->name('attendances.store');
     Route::get('attendances/stats', [AttendanceController::class, 'stats'])->middleware('can:view_attendances')->name('attendances.stats');
-    Route::resource('absence-permissions', AbsencePermissionController::class)->only(['index', 'create', 'store', 'show', 'destroy'])->middleware('can:view_absence_permissions');
+    Route::resource('absence-permissions', AbsencePermissionController::class)
+        ->only(['index', 'create', 'store', 'show', 'destroy'])
+        ->middleware('can:view_absence_permissions')
+        ->middlewareFor(['create', 'store'], 'can:create_absence_permissions')
+        ->middlewareFor('destroy', 'can:delete_absence_permissions');
     Route::patch('absence-permissions/{absencePermission}/review', [AbsencePermissionController::class, 'review'])
         ->middleware('can:review_absence_permissions')->name('absence-permissions.review');
 
@@ -279,7 +360,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Administration Routes
     Route::resource('roles', RoleController::class)->middleware('can:manage_roles_permissions');
     Route::resource('permissions', PermissionController::class)->middleware('can:manage_roles_permissions');
-    Route::resource('users', UserController::class)->middleware('can:view_users');
+    Route::resource('users', UserController::class)
+        ->middleware('can:view_users')
+        ->middlewareFor(['create', 'store'], 'can:create_users')
+        ->middlewareFor(['edit', 'update'], 'can:edit_users')
+        ->middlewareFor('destroy', 'can:delete_users');
 
     // File Storage Settings
     Route::get('settings/file-storage', [FileStorageController::class, 'index'])->middleware('can:manage_file_storage')->name('file-storage.index');

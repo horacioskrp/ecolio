@@ -93,6 +93,15 @@ class RoleController extends Controller
 
     public function update(UpdateRoleRequest $request, Role $role): RedirectResponse
     {
+        // Le rôle administrateur est le seul filet de sécurité de l'instance :
+        // le renommer ou lui retirer des permissions verrouillerait l'application
+        // sans aucun moyen de rétablissement depuis l'interface.
+        if ($role->name === Roles::ADMINISTRATOR) {
+            return back()->withErrors([
+                'role' => "Le rôle administrateur ne peut pas être modifié : il doit conserver l'ensemble des permissions.",
+            ]);
+        }
+
         $role->update([
             'name'        => $request->validated('name'),
             'description' => $request->validated('description'),

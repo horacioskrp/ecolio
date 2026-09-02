@@ -52,7 +52,7 @@ class StudentStatsTest extends TestCase
         return Enrollment::create([
             'school_id' => $this->school->id, 'student_id' => $s->id, 'class_id' => $c->id,
             'academic_year_id' => $y->id, 'enrollment_code' => 'ENR-' . Str::random(8),
-            'enrollment_date' => '2025-09-01', 'status' => 'paid', 'academic_status' => $academicStatus,
+            'enrollment_date' => '2025-09-01', 'status' => 'ACTIVE', 'academic_status' => $academicStatus,
         ]);
     }
 

@@ -15,6 +15,7 @@ use App\Models\Mark;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,7 +40,7 @@ class MarkController extends Controller
         // Élèves inscrits dans cette classe pour l'année active
         $enrollments = Enrollment::where('enrollments.class_id', $evaluation->classSubject->class_id)
             ->where('enrollments.academic_year_id', $activeYear?->id)
-            ->where('enrollments.status', 'active')
+            ->where('enrollments.status', Enrollment::STATUS_ACTIVE)
             ->join('students', 'students.id', '=', 'enrollments.student_id')
             ->orderBy('students.lastname')
             ->orderBy('students.firstname')
@@ -98,15 +99,23 @@ class MarkController extends Controller
 
         $maxScore = (float) ($evaluation->template?->max_score ?? 20);
 
+        // L'élève noté doit être inscrit (activement) dans la classe de l'évaluation :
+        // `exists:students,id` seul laisserait noter un élève d'une autre classe.
+        $enrolledIds = Enrollment::where('class_id', $evaluation->classSubject->class_id)
+            ->where('status', Enrollment::STATUS_ACTIVE)
+            ->pluck('student_id')
+            ->all();
+
         $validated = $request->validate([
             'marks'              => ['required', 'array', 'min:1'],
-            'marks.*.student_id' => ['required', 'uuid', 'exists:students,id'],
+            'marks.*.student_id' => ['required', 'uuid', Rule::in($enrolledIds)],
             'marks.*.score'      => ['nullable', 'numeric', 'min:0', "max:{$maxScore}"],
             'marks.*.absent'     => ['boolean'],
             'marks.*.comments'   => ['nullable', 'string', 'max:500'],
         ], [
-            'marks.*.score.max' => "La note maximale est {$maxScore}.",
-            'marks.*.score.min' => 'La note minimale est 0.',
+            'marks.*.score.max'  => "La note maximale est {$maxScore}.",
+            'marks.*.score.min'  => 'La note minimale est 0.',
+            'marks.*.student_id.in' => "Cet élève n'est pas inscrit dans la classe de cette évaluation.",
         ]);
 
         DB::transaction(function () use ($evaluation, $validated): void {
@@ -130,7 +139,7 @@ class MarkController extends Controller
 
         // Marquer l'évaluation comme terminée si toutes les notes sont saisies
         $totalEnrolled = Enrollment::where('class_id', $evaluation->classSubject->class_id)
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->count();
 
         $totalMarked = Mark::where('evaluation_id', $evaluation->id)

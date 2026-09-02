@@ -171,7 +171,7 @@ class GradeController extends Controller
 
         $enrollment = Enrollment::where('student_id', $student->id)
             ->when($activeYear, fn ($q) => $q->where('academic_year_id', $activeYear->id))
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->with('classroom:id,name,code,classroom_type_id')
             ->first();
 

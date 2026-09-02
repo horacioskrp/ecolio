@@ -460,7 +460,7 @@ class GradingService
     private function activeStudentIds(string $classId): Collection
     {
         return Enrollment::where('class_id', $classId)
-            ->where('status', 'active')
+            ->where('status', Enrollment::STATUS_ACTIVE)
             ->pluck('student_id');
     }
 

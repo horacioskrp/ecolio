@@ -166,7 +166,7 @@ class OfficialExamTest extends TestCase
         $enroll = fn (Student $s, Classroom $c) => Enrollment::create([
             'school_id' => $school->id, 'student_id' => $s->id, 'class_id' => $c->id,
             'academic_year_id' => $year->id, 'enrollment_code' => 'ENR-' . Str::random(8),
-            'enrollment_date' => '2025-09-01', 'status' => 'paid', 'academic_status' => 'en_cours',
+            'enrollment_date' => '2025-09-01', 'status' => 'ACTIVE', 'academic_status' => 'en_cours',
         ]);
         $enroll($inCohort, $class);
         $enroll($outCohort, $other);
