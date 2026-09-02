@@ -15,7 +15,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import { toPath, useCurrentUrl } from '@/hooks/use-current-url';
+import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem } from '@/types';
 
 // Style de l'élément actif (parent ou sous-item) — factorisé pour éviter la triplication.
@@ -23,7 +23,7 @@ const ACTIVE_CLASS =
     'data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-semibold data-[active=true]:[&>svg]:text-sidebar-primary-foreground';
 
 export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
-    const { currentUrl, findActiveHref } = useCurrentUrl();
+    const { currentUrl, findActiveKey } = useCurrentUrl();
 
     const auth = (usePage().props as { auth?: { permissions?: string[] } }).auth;
     const permissions = auth?.permissions ?? [];
@@ -38,14 +38,16 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
     // Lien actif = le plus spécifique parmi TOUTES les entrées du menu. Ainsi une
     // sous-page (/students/12/edit) garde son entrée allumée, et /accounting/transactions
     // n'allume pas aussi /accounting.
-    const activeHref = findActiveHref(
-        visibleItems.flatMap((item) => (item.items ? item.items.map((s) => s.href) : [item.href])),
+    const activeItem = findActiveKey(
+        visibleItems
+            .flatMap((item) => (item.items ? item.items : [item]))
+            .map((entry) => ({ key: entry, hrefs: [entry.href, ...(entry.match ?? [])] })),
     );
 
-    const isLinkActive = (href: NavItem["href"]) => activeHref !== null && toPath(href) === activeHref;
+    const isLinkActive = (item: NavItem) => activeItem === item;
 
     // Un groupe est actif si l'un de ses sous-items est le lien actif.
-    const isGroupActive = (item: NavItem) => item.items?.some((sub) => isLinkActive(sub.href)) ?? false;
+    const isGroupActive = (item: NavItem) => item.items?.some((sub) => isLinkActive(sub)) ?? false;
 
     // État d'ouverture contrôlé : le groupe courant s'ouvre automatiquement
     // (et à chaque navigation), tout en laissant l'utilisateur replier/déplier.
@@ -103,7 +105,7 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
                                                 <SidebarMenuSubItem key={subItem.title}>
                                                     <SidebarMenuSubButton
                                                         asChild
-                                                        isActive={isLinkActive(subItem.href)}
+                                                        isActive={isLinkActive(subItem)}
                                                         className={ACTIVE_CLASS}
                                                     >
                                                         <Link href={subItem.href} prefetch>
@@ -119,7 +121,7 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
                             ) : (
                                 <SidebarMenuButton
                                     asChild
-                                    isActive={isLinkActive(item.href)}
+                                    isActive={isLinkActive(item)}
                                     tooltip={{ children: item.title }}
                                     className={ACTIVE_CLASS}
                                 >

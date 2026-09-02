@@ -23,6 +23,12 @@ export type UseCurrentUrlReturn = {
      * (le plus spécifique). Retourne son chemin normalisé, ou null.
      */
     findActiveHref: (hrefs: Href[]) => string | null;
+    /**
+     * Parmi plusieurs entrées, celle dont l'un des liens correspond le mieux à
+     * l'URL courante. Chaque entrée peut porter plusieurs chemins (une section
+     * regroupant des URL sans préfixe commun).
+     */
+    findActiveKey: <T>(entries: { key: T; hrefs: Href[] }[]) => T | null;
     whenCurrentUrl: WhenCurrentUrlFn;
 };
 
@@ -83,6 +89,22 @@ export function useCurrentUrl(): UseCurrentUrlReturn {
             .filter((path): path is string => path !== null && isUnder(currentUrlPath, path))
             .sort((a, b) => b.length - a.length)[0] ?? null;
 
+    const findActiveKey = <T,>(entries: { key: T; hrefs: Href[] }[]): T | null => {
+        let best: { key: T; length: number } | null = null;
+
+        for (const entry of entries) {
+            for (const href of entry.hrefs) {
+                const path = toPath(href);
+                if (path === null || !isUnder(currentUrlPath, path)) continue;
+                if (!best || path.length > best.length) {
+                    best = { key: entry.key, length: path.length };
+                }
+            }
+        }
+
+        return best?.key ?? null;
+    };
+
     const whenCurrentUrl: WhenCurrentUrlFn = <TIfTrue, TIfFalse = null>(
         urlToCheck: Href,
         ifTrue: TIfTrue,
@@ -94,6 +116,7 @@ export function useCurrentUrl(): UseCurrentUrlReturn {
         isCurrentUrl,
         isUnderUrl,
         findActiveHref,
+        findActiveKey,
         whenCurrentUrl,
     };
 }

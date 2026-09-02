@@ -14,4 +14,10 @@ export type NavItem = {
     items?: NavItem[];
     /** Permission requise pour afficher l'entrée (absente = toujours visible). */
     permission?: string;
+    /**
+     * Chemins supplémentaires qui gardent l'entrée active (avec leurs
+     * sous-pages). Utile quand une section regroupe plusieurs URL sans préfixe
+     * commun exclusif — ex. « Mon compte » : profil, mot de passe, 2FA, apparence.
+     */
+    match?: string[];
 };

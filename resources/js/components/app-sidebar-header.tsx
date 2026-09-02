@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserMenuContent } from '@/components/user-menu-content';
-import { toPath, useCurrentUrl } from '@/hooks/use-current-url';
+import { useCurrentUrl } from '@/hooks/use-current-url';
 import { getFullName } from '@/hooks/use-initials';
 import { mainNavItems } from '@/types';
 
 export function AppSidebarHeader() {
     const { auth } = usePage().props;
-    const { currentUrl, findActiveHref } = useCurrentUrl();
+    const { currentUrl, findActiveKey } = useCurrentUrl();
 
     const fullName = getFullName(auth.user.firstname, auth.user.lastname);
     const initials = `${auth.user.firstname?.[0] ?? ''}${auth.user.lastname?.[0] ?? ''}`.toUpperCase();
@@ -31,17 +31,18 @@ export function AppSidebarHeader() {
     const trail = useMemo<string[]>(() => {
         // Même règle que la navigation : le lien le plus spécifique gagne, et une
         // sous-page (/students/12/edit) reste rattachée à son entrée de menu.
-        const activeHref = findActiveHref(
-            mainNavItems.flatMap((item) => (item.items ? item.items.map((s) => s.href) : [item.href])),
+        const active = findActiveKey(
+            mainNavItems
+                .flatMap((item) => (item.items ? item.items : [item]))
+                .map((entry) => ({ key: entry, hrefs: [entry.href, ...(entry.match ?? [])] })),
         );
 
-        if (!activeHref) return [];
+        if (!active) return [];
 
         for (const item of mainNavItems) {
             if (item.items) {
-                const sub = item.items.find((s) => toPath(s.href) === activeHref);
-                if (sub) return [item.title, sub.title];
-            } else if (toPath(item.href) === activeHref) {
+                if (item.items.includes(active)) return [item.title, active.title];
+            } else if (item === active) {
                 return [item.title];
             }
         }
