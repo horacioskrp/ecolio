@@ -3,7 +3,7 @@ import { User, Lock, Shield, Palette } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import Heading from '@/components/heading';
 import { Separator } from '@/components/ui/separator';
-import { useCurrentUrl } from '@/hooks/use-current-url';
+import { toPath, useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
@@ -35,7 +35,8 @@ const sidebarNavItems: NavItem[] = [
 ];
 
 export default function SettingsLayout({ children, bare = false }: Readonly<PropsWithChildren<{ bare?: boolean }>>) {
-    const { isCurrentUrl } = useCurrentUrl();
+    // Le lien le plus spécifique gagne, et une sous-page reste rattachée à son onglet.
+    const activeHref = useCurrentUrl().findActiveHref(sidebarNavItems.map((i) => i.href));
 
     // When server-side rendering, we only render the layout on the client...
     if (globalThis.window === undefined) {
@@ -63,7 +64,7 @@ export default function SettingsLayout({ children, bare = false }: Readonly<Prop
                                         href={item.href}
                                         className={cn(
                                             'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all',
-                                            isCurrentUrl(item.href)
+                                            toPath(item.href) === activeHref
                                                 ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 shadow-sm'
                                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                         )}

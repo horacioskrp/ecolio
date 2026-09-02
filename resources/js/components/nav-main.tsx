@@ -23,7 +23,7 @@ const ACTIVE_CLASS =
     'data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-semibold data-[active=true]:[&>svg]:text-sidebar-primary-foreground';
 
 export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
-    const { currentUrl, isCurrentUrl } = useCurrentUrl();
+    const { currentUrl, findActiveKey } = useCurrentUrl();
 
     const auth = (usePage().props as { auth?: { permissions?: string[] } }).auth;
     const permissions = auth?.permissions ?? [];
@@ -35,9 +35,19 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
         .map((item) => (item.items ? { ...item, items: item.items.filter(allowed) } : item))
         .filter((item) => (item.items ? item.items.length > 0 : allowed(item)));
 
-    // Un groupe est actif si l'un de ses sous-items correspond à l'URL courante.
-    const isGroupActive = (item: NavItem) =>
-        item.items?.some((sub) => isCurrentUrl(sub.href)) ?? false;
+    // Lien actif = le plus spécifique parmi TOUTES les entrées du menu. Ainsi une
+    // sous-page (/students/12/edit) garde son entrée allumée, et /accounting/transactions
+    // n'allume pas aussi /accounting.
+    const activeItem = findActiveKey(
+        visibleItems
+            .flatMap((item) => (item.items ? item.items : [item]))
+            .map((entry) => ({ key: entry, hrefs: [entry.href, ...(entry.match ?? [])] })),
+    );
+
+    const isLinkActive = (item: NavItem) => activeItem === item;
+
+    // Un groupe est actif si l'un de ses sous-items est le lien actif.
+    const isGroupActive = (item: NavItem) => item.items?.some((sub) => isLinkActive(sub)) ?? false;
 
     // État d'ouverture contrôlé : le groupe courant s'ouvre automatiquement
     // (et à chaque navigation), tout en laissant l'utilisateur replier/déplier.
@@ -56,7 +66,11 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
     const setOpen = (title: string, open: boolean) =>
         setOpenTitles((prev) => {
             const next = new Set(prev);
-            open ? next.add(title) : next.delete(title);
+            if (open) {
+                next.add(title);
+            } else {
+                next.delete(title);
+            }
             return next;
         });
 
@@ -91,7 +105,7 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
                                                 <SidebarMenuSubItem key={subItem.title}>
                                                     <SidebarMenuSubButton
                                                         asChild
-                                                        isActive={isCurrentUrl(subItem.href)}
+                                                        isActive={isLinkActive(subItem)}
                                                         className={ACTIVE_CLASS}
                                                     >
                                                         <Link href={subItem.href} prefetch>
@@ -107,7 +121,7 @@ export function NavMain({ items = [] }: Readonly<{ items: NavItem[] }>) {
                             ) : (
                                 <SidebarMenuButton
                                     asChild
-                                    isActive={isCurrentUrl(item.href)}
+                                    isActive={isLinkActive(item)}
                                     tooltip={{ children: item.title }}
                                     className={ACTIVE_CLASS}
                                 >

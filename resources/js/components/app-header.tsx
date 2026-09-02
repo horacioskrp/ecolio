@@ -28,7 +28,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { UserMenuContent } from '@/components/user-menu-content';
-import { useCurrentUrl } from '@/hooks/use-current-url';
+import { toPath, useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
 import { cn, toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -68,7 +68,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage();
     const { auth } = page.props;
     const getInitials = useInitials();
-    const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
+    // Même règle que la sidebar : une sous-page garde son entrée allumée.
+    const { findActiveHref } = useCurrentUrl();
+    const activeHref = findActiveHref(mainNavItems.map((i) => i.href));
     return (
         <>
             <div className="border-b border-sidebar-border/80">
@@ -155,10 +157,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                             href={item.href}
                                             className={cn(
                                                 navigationMenuTriggerStyle(),
-                                                whenCurrentUrl(
-                                                    item.href,
-                                                    activeItemStyles,
-                                                ),
+                                                toPath(item.href) === activeHref ? activeItemStyles : '',
                                                 'h-9 cursor-pointer px-3',
                                             )}
                                         >
@@ -167,7 +166,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                             )}
                                             {item.title}
                                         </Link>
-                                        {isCurrentUrl(item.href) && (
+                                        {toPath(item.href) === activeHref && (
                                             <div className="absolute bottom-0 left-0 h-0.5 w-full translate-y-px bg-black dark:bg-white"></div>
                                         )}
                                     </NavigationMenuItem>
