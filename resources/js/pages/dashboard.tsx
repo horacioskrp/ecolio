@@ -1,5 +1,4 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useMoney } from '@/helpers/money';
 import { Users, Banknote, TrendingUp, TrendingDown, Wallet, CheckCircle2, AlertCircle, XCircle, AlertTriangle, BookOpen, ClipboardList, ArrowRight, CalendarDays, GraduationCap, UserCheck, ShieldCheck, FileBadge, LayoutGrid, User, Layers } from 'lucide-react';
 import {
     Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart,
@@ -7,8 +6,10 @@ import {
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useMoney } from '@/helpers/money';
 import { route } from '@/helpers/route';
 import AppLayout from '@/layouts/app-layout';
+import { useChartTheme } from '@/lib/chart-theme';
 import type { BreadcrumbItem } from '@/types';
 
 /* ------------------------------------------------------------------ */
@@ -265,6 +266,7 @@ function SectionCard({ title, icon, count, children, action }: {
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Tableau de bord', href: '/dashboard' }];
 
 export default function Dashboard({ activeYear, selectedYearId, selectedYear, academicYears, userRole, financial, enrollments, teaching, academic }: Readonly<DashboardProps>) {
+    const theme = useChartTheme();
     const fmt = useMoney();
 
     const changeYear = (id: string) => {
@@ -275,9 +277,9 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
     const collectedPct = pct(Number(stats?.total_paid ?? 0), Number(stats?.total_amount ?? 0));
 
     const invoiceStatusData = stats ? [
-        { name: 'Soldé',    value: Number(stats.paid_count ?? 0),    color: '#22c55e' },
-        { name: 'Partiel',  value: Number(stats.partial_count ?? 0), color: '#f97316' },
-        { name: 'Non payé', value: Number(stats.issued_count ?? 0),  color: '#ef4444' },
+        { name: 'Soldé',    value: Number(stats.paid_count ?? 0),    color: theme.status.good },
+        { name: 'Partiel',  value: Number(stats.partial_count ?? 0), color: theme.status.warning },
+        { name: 'Non payé', value: Number(stats.issued_count ?? 0),  color: theme.status.critical },
     ].filter(d => d.value > 0) : [];
 
     const isFinancial  = !!financial;
@@ -562,15 +564,15 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                         margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="payGrad" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
-                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                                <stop offset="5%" stopColor={theme.primary} stopOpacity={0.35} />
+                                                <stop offset="95%" stopColor={theme.primary} stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={48}
+                                        <XAxis dataKey="name" tick={{ fontSize: 12, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={48}
                                             tickFormatter={(v: number) => v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`} />
                                         <RTooltip formatter={(v) => [fmt(Number(v)), 'Encaissé']} labelFormatter={() => ''} />
-                                        <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} fill="url(#payGrad)" />
+                                        <Area type="monotone" dataKey="total" stroke={theme.primary} strokeWidth={2} fill="url(#payGrad)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             )}
@@ -658,7 +660,7 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                 <div className="flex items-center gap-4">
                                     <ResponsiveContainer width="55%" height={200}>
                                         <PieChart>
-                                            <Pie data={invoiceStatusData} dataKey="value" nameKey="name"
+                                            <Pie isAnimationActive={false} data={invoiceStatusData} dataKey="value" nameKey="name"
                                                 innerRadius={50} outerRadius={80} paddingAngle={2}>
                                                 {invoiceStatusData.map(d => <Cell key={d.name} fill={d.color} />)}
                                             </Pie>
@@ -690,10 +692,10 @@ export default function Dashboard({ activeYear, selectedYearId, selectedYear, ac
                                 <ResponsiveContainer width="100%" height={200}>
                                     <BarChart data={enrollments.byClass.map(c => ({ name: c.class_name, total: Number(c.total) }))}
                                         margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={28} allowDecimals={false} />
                                         <RTooltip formatter={(v) => [`${v}`, 'Élèves']} />
-                                        <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                                        <Bar dataKey="total" fill={theme.primary} radius={[6, 6, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
