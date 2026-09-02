@@ -62,10 +62,12 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        // SQLite (tests) : désactiver les FK pour permettre les dropColumn
-        if (config('database.connections.' . config('database.default') . '.driver') === 'sqlite') {
-            DB::statement('PRAGMA foreign_keys = OFF');
-        }
+        // NB : ne jamais interroger la base ici. `boot()` s'exécute à chaque
+        // commande artisan (y compris `package:discover` pendant un
+        // `composer install`) : une requête ferait échouer l'installation sur un
+        // clone neuf, avant même que la base existe.
+        // La désactivation des FK SQLite nécessaire aux `dropColumn` est faite
+        // au bon moment par Tests\TestCase::beforeRefreshingDatabase().
 
         Password::defaults(function (): ?Password {
             // Les tests utilisent des mots de passe simples : on garde le défaut souple.
