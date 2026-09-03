@@ -1,7 +1,8 @@
 import { Head, router } from '@inertiajs/react';
 import { BarChart3, CalendarClock, GraduationCap, Layers, UserCheck, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import {
-    Bar, BarChart, CartesianGrid, Cell, LabelList, Pie, PieChart,
+    Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart,
     ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
 } from 'recharts';
 import { route } from '@/helpers/route';
@@ -9,6 +10,7 @@ import AppLayout from '@/layouts/app-layout';
 import { useChartTheme } from '@/lib/chart-theme';
 
 interface Bar { label: string; count: number }
+interface ClassRow { label: string; cycle: string; capacity: number; level: number | null; count: number; male: number; female: number }
 interface YearRef { id: string; year: string }
 
 interface Props {
@@ -16,12 +18,30 @@ interface Props {
     byGender: { male: number; female: number };
     byNationality: Bar[];
     byAge: Bar[];
-    byClass: Bar[];
+    byClass: ClassRow[];
     parite: { female_pct: number; ips: number | null };
     ageMoyen: number | null;
     overAge: { evaluated: number; count: number; rate: number };
     academicYears: YearRef[];
     selectedYear: YearRef | null;
+}
+
+/** Infobulle riche du graphe classes : total, capacité (taux de remplissage), sexe. */
+function ClassTooltip({ active, payload, theme, blue, orange }: Readonly<{
+    active?: boolean; payload?: { payload: ClassRow }[];
+    theme: ReturnType<typeof useChartTheme>; blue: string; orange: string;
+}>) {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    const fill = d.capacity > 0 ? Math.round((d.count / d.capacity) * 100) : null;
+    return (
+        <div style={{ ...theme.tooltip.contentStyle, padding: '8px 10px', fontSize: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 3 }}>{d.label}</div>
+            <div style={theme.tooltip.itemStyle}>Total : <strong>{d.count}</strong>{d.capacity > 0 ? ` / ${d.capacity} places${fill != null ? ` · ${fill}%` : ''}` : ''}</div>
+            <div style={{ color: blue }}>Garçons : {d.male}</div>
+            <div style={{ color: orange }}>Filles : {d.female}</div>
+        </div>
+    );
 }
 
 function Kpi({ label, value, sub, icon: Icon, tone }: Readonly<{ label: string; value: string | number; sub?: string; icon: React.ElementType; tone: string }>) {
@@ -71,8 +91,17 @@ export default function Stats({ summary, byGender, byAge, byClass, parite, ageMo
     const genderTotal = byGender.male + byGender.female;
 
     const ageData = byAge.map((b) => ({ ...b, short: AGE_SHORT[b.label] ?? b.label }));
-    const classData = [...byClass].sort((a, b) => b.count - a.count);
-    const classChartHeight = Math.max(220, classData.length * 22 + 24);
+
+    // Filtres (côté client, instantané) : cycle + tri. byClass arrive déjà ordonné
+    // par niveau, donc « Par niveau » conserve l'ordre reçu.
+    const cycles = useMemo(() => [...new Set(byClass.map((c) => c.cycle))], [byClass]);
+    const [cycle, setCycle] = useState<string>('Tous');
+    const [sort, setSort] = useState<'niveau' | 'effectif'>('niveau');
+    const classData = useMemo(() => {
+        const filtered = byClass.filter((c) => cycle === 'Tous' || c.cycle === cycle);
+        return sort === 'effectif' ? [...filtered].sort((a, b) => b.count - a.count) : filtered;
+    }, [byClass, cycle, sort]);
+    const classChartHeight = Math.max(200, classData.length * 26 + 24);
 
     const cards = [
         { label: `Inscrits ${selectedYear?.year ?? ''}`, value: summary.enrolled, sub: `${summary.classes} classes`, tone: 'text-blue-600', icon: GraduationCap },
@@ -168,18 +197,52 @@ export default function Stats({ summary, byGender, byAge, byClass, parite, ageMo
                     </Card>
                 </div>
 
-                {/* Effectifs par classe */}
+                {/* Effectifs par classe — filtrable par cycle, empilé par sexe */}
                 <Card title={`Effectifs par classe${selectedYear ? ` — ${selectedYear.year}` : ''}`} icon={<BarChart3 className="w-4 h-4" />}>
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                        {['Tous', ...cycles].map((c) => (
+                            <button
+                                key={c}
+                                type="button"
+                                onClick={() => setCycle(c)}
+                                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                                    cycle === c
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                }`}
+                            >
+                                {c}
+                            </button>
+                        ))}
+                        <div className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                            <span className="mr-1">Tri</span>
+                            {(['niveau', 'effectif'] as const).map((s) => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setSort(s)}
+                                    className={`px-2 py-1 rounded-md capitalize transition-colors ${
+                                        sort === s ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    {s === 'niveau' ? 'Par niveau' : 'Par effectif'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     {classData.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-12">Aucune donnée</p>
+                        <p className="text-sm text-gray-400 text-center py-12">Aucune classe pour ce filtre</p>
                     ) : (
                         <ResponsiveContainer width="100%" height={classChartHeight}>
-                            <BarChart layout="vertical" data={classData} margin={{ top: 0, right: 28, left: 8, bottom: 0 }}>
+                            <BarChart layout="vertical" data={classData} margin={{ top: 0, right: 36, left: 8, bottom: 0 }} barCategoryGap="22%">
                                 <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
                                 <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
                                 <YAxis type="category" dataKey="label" width={96} tick={{ fontSize: 11, fill: theme.axis }} axisLine={false} tickLine={false} />
-                                <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v} élèves`, 'Effectif']} />
-                                <Bar dataKey="count" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={20}>
+                                <RTooltip cursor={{ fill: theme.grid, fillOpacity: 0.25 }} content={<ClassTooltip theme={theme} blue={BLUE} orange={ORANGE} />} />
+                                <Legend wrapperStyle={{ fontSize: 11 }} />
+                                <Bar dataKey="male" name="Garçons" stackId="s" fill={BLUE} maxBarSize={22} />
+                                <Bar dataKey="female" name="Filles" stackId="s" fill={ORANGE} radius={[0, 4, 4, 0]} maxBarSize={22}>
                                     <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: theme.tick }} />
                                 </Bar>
                             </BarChart>

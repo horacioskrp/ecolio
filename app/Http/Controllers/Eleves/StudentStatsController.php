@@ -9,6 +9,7 @@ use App\Models\Enrollment;
 use App\Models\Student;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -99,17 +100,33 @@ class StudentStatsController extends Controller
         $overEval  = $ageRows->count();
         $overCount = $ageRows->filter(fn ($r) => (Carbon::parse($r->birth_date)->age - (int) $r->expected_age) >= $overAgeThreshold)->count();
 
-        // Effectifs par classe (année sélectionnée, scolarité active)
+        // Effectifs par classe (année sélectionnée, scolarité active), enrichis du
+        // cycle, du sexe et de la capacité pour permettre filtre et empilage côté client.
         $byClass = $selectedYearId
             ? Enrollment::query()
                 ->join('classes', 'classes.id', '=', 'enrollments.class_id')
+                ->join('students', 'students.id', '=', 'enrollments.student_id')
+                ->leftJoin('classroom_types', 'classroom_types.id', '=', 'classes.classroom_type_id')
                 ->where('enrollments.academic_year_id', $selectedYearId)
                 ->whereIn('enrollments.academic_status', Enrollment::ACTIVE_ACADEMIC_STATUSES)
-                ->select('classes.name as label', DB::raw('COUNT(*) as count'))
-                ->groupBy('classes.name')
+                ->selectRaw("classes.name AS label, classroom_types.name AS cycle, classes.capacity AS capacity,
+                    classes.expected_age AS level,
+                    COUNT(*) AS total,
+                    COUNT(CASE WHEN students.gender = 'male' THEN 1 END) AS male,
+                    COUNT(CASE WHEN students.gender = 'female' THEN 1 END) AS female")
+                ->groupBy('classes.name', 'classroom_types.name', 'classes.capacity', 'classes.expected_age')
+                ->orderByRaw('classes.expected_age NULLS LAST')
                 ->orderBy('classes.name')
                 ->get()
-                ->map(fn ($r) => ['label' => $r->label, 'count' => (int) $r->count])
+                ->map(fn ($r) => [
+                    'label'    => $r->label,
+                    'cycle'    => $this->cycleLabel($r->cycle),
+                    'capacity' => (int) $r->capacity,
+                    'level'    => $r->level !== null ? (int) $r->level : null,
+                    'count'    => (int) $r->total,
+                    'male'     => (int) $r->male,
+                    'female'   => (int) $r->female,
+                ])
             : collect();
 
         return Inertia::render('Eleves/Students/Stats', [
@@ -133,5 +150,20 @@ class StudentStatsController extends Controller
             'academicYears' => $academicYears->map(fn ($y) => ['id' => $y->id, 'year' => $y->year])->values(),
             'selectedYear'  => $selectedYear ? ['id' => $selectedYear->id, 'year' => $selectedYear->year] : null,
         ]);
+    }
+
+    /** Cycle court à partir du libellé du type de classe (pour le filtre). */
+    private function cycleLabel(?string $type): string
+    {
+        $t = Str::lower($type ?? '');
+
+        return match (true) {
+            str_contains($t, 'maternelle')        => 'Maternelle',
+            str_contains($t, 'primaire')          => 'Primaire',
+            str_contains($t, 'collège')           => 'Collège',
+            str_contains($t, 'technique')         => 'Lycée technique',
+            str_contains($t, 'lycée')             => 'Lycée',
+            default                               => 'Autre',
+        };
     }
 }
