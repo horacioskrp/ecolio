@@ -92,6 +92,17 @@ class DemoSeeder extends Seeder
     /** Effectif plancher pour toute classe non listée dans CLASS_SIZES. */
     private const MIN_CLASS_SIZE = 20;
 
+    /**
+     * Années passées à générer pour l'onglet « Comparaisons » : sans historique,
+     * les tendances pluriannuelles n'ont qu'un point. Chaque ligne fixe les cibles
+     * agrégées de l'année (en %), avec une progression volontaire vers l'année
+     * courante (effectif et réussite en hausse, redoublement et abandon en baisse).
+     */
+    private const HISTORY = [
+        ['year' => '2023-2024', 'effectif' => 360, 'pass' => 63, 'recovery' => 69, 'redoublement' => 15, 'abandon' => 7, 'admission' => 70],
+        ['year' => '2024-2025', 'effectif' => 440, 'pass' => 67, 'recovery' => 73, 'redoublement' => 12, 'abandon' => 5, 'admission' => 76],
+    ];
+
     /** Programme par cycle : code matière => coefficient. */
     private const CURRICULUM = [
         'primaire' => [
@@ -181,6 +192,7 @@ class DemoSeeder extends Seeder
         $this->step('Personnel et paie', fn () => $this->seedPayroll());
         $this->step('Dossiers courants', fn () => $this->seedCasework());
         $this->step('Bulletins', fn () => $this->seedReportCards());
+        $this->step('Années passées (comparaisons)', fn () => $this->seedHistory());
 
         $this->command?->newLine();
         $this->command?->info('Jeu de démonstration prêt.');
@@ -1807,5 +1819,211 @@ class DemoSeeder extends Seeder
         foreach ($this->classes as $class) {
             $builder->build($class, $period, $this->year, null, false, $author);
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Années passées (onglet Comparaisons)                                */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Génère des années scolaires révolues avec juste ce qu'il faut pour alimenter
+     * les tendances pluriannuelles : inscriptions (statuts décidés → taux de
+     * redoublement/abandon), factures (recouvrement), bulletins verrouillés
+     * (réussite) et un examen officiel (admission). Les valeurs suivent les cibles
+     * de {@see self::HISTORY}. Insertions directes, sans repasser par tout le
+     * pipeline d'évaluation — inutile pour des agrégats d'archive.
+     */
+    private function seedHistory(): void
+    {
+        $studentIds = Student::query()->pluck('id')->all();
+        $students   = Student::query()->get(['id', 'lastname', 'firstname'])->keyBy('id');
+        $classIds   = $this->classes->pluck('id')->all();
+        $classe3e   = $this->classes->firstWhere('code', '3ème') ?? $this->classes->first();
+        $author     = User::query()->role('administrateur')->value('id') ?? User::query()->value('id');
+
+        if ($studentIds === [] || $classIds === []) {
+            return;
+        }
+
+        foreach (self::HISTORY as $h) {
+            if (AcademicYear::query()->where('year', $h['year'])->exists()) {
+                continue; // idempotent
+            }
+
+            $start = (int) substr($h['year'], 0, 4);
+
+            $year = AcademicYear::create([
+                'year'       => $h['year'],
+                'start_date' => $start . '-09-15',
+                'end_date'   => ($start + 1) . '-07-10',
+                'active'     => false,
+            ]);
+
+            $period = AcademicPeriod::create([
+                'name'             => 'Bilan annuel',
+                'type'             => 'trimestre',
+                'weight'           => 1,
+                'start_date'       => $start . '-09-15',
+                'end_date'         => ($start + 1) . '-07-10',
+                'is_current'       => false,
+                'academic_year_id' => $year->id,
+            ]);
+
+            $cohort = collect($studentIds)->shuffle()->take(min($h['effectif'], count($studentIds)))->values();
+
+            $enrollRows = [];
+            $invRows    = [];
+            $rcRows     = [];
+
+            foreach ($cohort as $i => $sid) {
+                $n         = $i + 1;
+                $classId   = $classIds[$n % count($classIds)];
+                $enrollId  = (string) Str::uuid7();
+                $invId     = (string) Str::uuid7();
+                [$total, $paid, $invStatus] = $this->historyInvoice($h);
+                $average   = $this->historyAverage($h);
+                $st        = $students->get($sid);
+
+                $enrollRows[] = [
+                    'id'               => $enrollId,
+                    'school_id'        => $this->school->id,
+                    'student_id'       => $sid,
+                    'class_id'         => $classId,
+                    'academic_year_id' => $year->id,
+                    'enrollment_code'  => 'HINS-' . $start . '-' . str_pad((string) $n, 4, '0', STR_PAD_LEFT),
+                    'enrolled_by'      => $author,
+                    'enrollment_date'  => $start . '-09-15',
+                    'status'           => Enrollment::STATUS_ACTIVE,
+                    'academic_status'  => $this->historyStatus($h),
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ];
+
+                $invRows[] = [
+                    'id'               => $invId,
+                    'enrollment_id'    => $enrollId,
+                    'invoice_number'   => 'HINV-' . $start . '-' . str_pad((string) $n, 4, '0', STR_PAD_LEFT),
+                    'subtotal'         => $total,
+                    'discount_amount'  => 0,
+                    'total'            => $total,
+                    'amount_paid'      => $paid,
+                    'amount_remaining' => $total - $paid,
+                    'status'           => $invStatus,
+                    'issued_at'        => $start . '-10-01',
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ];
+
+                $rcRows[] = [
+                    'id'                 => (string) Str::uuid7(),
+                    'student_id'         => $sid,
+                    'academic_period_id' => $period->id,
+                    'class_id'           => $classId,
+                    'academic_year_id'   => $year->id,
+                    'reference'          => 'HRC-' . $start . '-' . str_pad((string) $n, 4, '0', STR_PAD_LEFT),
+                    'average'            => $average,
+                    'rank'               => null,
+                    'mention'            => $this->historyMention($average),
+                    'payload'            => json_encode([
+                        'historique' => true,
+                        'student'    => ['name' => trim(($st->lastname ?? '') . ' ' . ($st->firstname ?? ''))],
+                        'average'    => $average,
+                    ], JSON_UNESCAPED_UNICODE),
+                    'locked_at'          => now(),
+                    'generated_by'       => $author,
+                    'created_at'         => now(),
+                    'updated_at'         => now(),
+                ];
+            }
+
+            foreach (array_chunk($enrollRows, 500) as $chunk) {
+                DB::table('enrollments')->insert($chunk);
+            }
+            foreach (array_chunk($invRows, 500) as $chunk) {
+                DB::table('invoices')->insert($chunk);
+            }
+            foreach (array_chunk($rcRows, 500) as $chunk) {
+                DB::table('report_cards')->insert($chunk);
+            }
+
+            // Examen officiel de fin d'année + admissions (taux cible).
+            $exam = OfficialExam::create([
+                'school_id'        => $this->school->id,
+                'type'             => 'bepc',
+                'name'             => 'BEPC ' . ($start + 1),
+                'year'             => $start + 1,
+                'session'          => 'normale',
+                'exam_date'        => ($start + 1) . '-06-15',
+                'center'           => 'Lycée de Tokoin',
+                'status'           => 'termine',
+                'academic_year_id' => $year->id,
+                'class_id'         => $classe3e->id,
+            ]);
+
+            $regRows = [];
+            foreach ($cohort->take(60) as $j => $sid) {
+                $admis = $this->faker->numberBetween(1, 100) <= $h['admission'];
+                $regRows[] = [
+                    'id'                  => (string) Str::uuid7(),
+                    'official_exam_id'    => $exam->id,
+                    'student_id'          => $sid,
+                    'registration_number' => 'BEPC-' . ($start + 1) . '-' . str_pad((string) ($j + 1), 4, '0', STR_PAD_LEFT),
+                    'status'              => $admis ? 'admis' : 'echoue',
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ];
+            }
+            DB::table('official_exam_registrations')->insert($regRows);
+        }
+    }
+
+    /** Statut de fin d'année, tiré pour approcher les taux cibles de l'année. */
+    private function historyStatus(array $h): string
+    {
+        $roll = $this->faker->numberBetween(1, 100);
+
+        return match (true) {
+            $roll <= $h['abandon']                        => 'abandon',
+            $roll <= $h['abandon'] + 3                     => 'transfere',
+            $roll <= $h['abandon'] + 3 + $h['redoublement'] => 'non_valide',
+            default                                        => 'valide',
+        };
+    }
+
+    /**
+     * Facture d'archive : montant fixe, part payée tirée autour du taux de
+     * recouvrement cible pour que l'agrégat de l'année tombe juste.
+     *
+     * @return array{0: int, 1: int, 2: string}
+     */
+    private function historyInvoice(array $h): array
+    {
+        $total = 150000;
+        $share = min(1.0, max(0.0, $h['recovery'] / 100 + $this->gaussian() * 0.18));
+        $paid  = (int) round($total * $share);
+
+        $status = $paid >= $total ? 'PAID' : ($paid > 0 ? 'PARTIALLY_PAID' : 'ISSUED');
+
+        return [$total, $paid, $status];
+    }
+
+    /** Moyenne d'archive : au-dessus ou en dessous de 10 selon le taux de réussite cible. */
+    private function historyAverage(array $h): float
+    {
+        return $this->faker->numberBetween(1, 100) <= $h['pass']
+            ? round($this->faker->randomFloat(2, 10, 16.5), 2)
+            : round($this->faker->randomFloat(2, 4, 9.75), 2);
+    }
+
+    /** Mention d'archive, dérivée de la moyenne (schéma examens officiels). */
+    private function historyMention(float $average): string
+    {
+        return match (true) {
+            $average >= 16 => 'tres_bien',
+            $average >= 14 => 'bien',
+            $average >= 12 => 'assez_bien',
+            $average >= 10 => 'passable',
+            default        => '',
+        };
     }
 }
