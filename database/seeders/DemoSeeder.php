@@ -125,6 +125,22 @@ class DemoSeeder extends Seeder
     /** @var array<int, string> */
     private array $teacherIds = [];
 
+    /** @var array<string, array<string, list<string>>>|null */
+    private ?array $localites = null;
+
+    /**
+     * Poids de recrutement hors Grand Lomé, par région.
+     * Le Maritime domine, puis les régions par éloignement croissant : c'est le
+     * sens réel des migrations internes vers la capitale.
+     */
+    private const REGION_WEIGHTS = [
+        'Maritime' => 40,
+        'Plateaux' => 25,
+        'Centrale' => 15,
+        'Kara'     => 12,
+        'Savanes'  => 8,
+    ];
+
     public function run(): void
     {
         if (app()->environment('production')) {
@@ -230,6 +246,105 @@ class DemoSeeder extends Seeder
     }
 
     /* ------------------------------------------------------------------ */
+    /* Géographie togolaise                                                */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Divisions administratives réelles du Togo, extraites de Togonou :
+     * 5 régions, 40 préfectures et un échantillon de localités par préfecture.
+     *
+     * @return array<string, array<string, list<string>>>
+     */
+    private function localites(): array
+    {
+        if ($this->localites !== null) {
+            return $this->localites;
+        }
+
+        $path = database_path('data/togo-localites.json');
+
+        if (! is_file($path)) {
+            $this->command?->warn('togo-localites.json introuvable : les élèves seront créés sans origine géographique.');
+
+            return $this->localites = [];
+        }
+
+        return $this->localites = json_decode(file_get_contents($path), true)['regions'] ?? [];
+    }
+
+    /**
+     * Origine géographique d'un élève.
+     *
+     * L'établissement est à Lomé, son recrutement l'est aussi : deux élèves sur
+     * trois viennent du Grand Lomé (Golfe et Agoè-Nyivé), le reste du pays selon
+     * des poids décroissants avec l'éloignement. Un tirage uniforme sur les 40
+     * préfectures donnerait une école dont un quart des élèves vient des Savanes.
+     *
+     * @return array{region: string, prefecture: string, ville: string}|null
+     */
+    private function origin(): ?array
+    {
+        $regions = $this->localites();
+
+        if ($regions === []) {
+            return null;
+        }
+
+        if ($this->faker->boolean(65) && isset($regions['Maritime'])) {
+            $region     = 'Maritime';
+            $prefecture = $this->faker->randomElement(
+                array_values(array_intersect(['Golfe', 'Agoè-Nyivé'], array_keys($regions['Maritime'])))
+                    ?: array_keys($regions['Maritime'])
+            );
+        } else {
+            $region     = $this->weighted(array_intersect_key(self::REGION_WEIGHTS, $regions));
+            $prefecture = $this->faker->randomElement(array_keys($regions[$region]));
+        }
+
+        $villes = $regions[$region][$prefecture] ?? [];
+
+        return [
+            'region'     => $region,
+            'prefecture' => $prefecture,
+            'ville'      => $villes === [] ? $prefecture : $this->faker->randomElement($villes),
+        ];
+    }
+
+    /**
+     * Tirage pondéré.
+     *
+     * @param  array<string, int>  $weights
+     */
+    private function weighted(array $weights): string
+    {
+        $roll = $this->faker->numberBetween(1, max(array_sum($weights), 1));
+
+        foreach ($weights as $key => $weight) {
+            $roll -= $weight;
+
+            if ($roll <= 0) {
+                return $key;
+            }
+        }
+
+        return array_key_first($weights);
+    }
+
+    /** Adresse à la togolaise : quartier et repère, plutôt qu'un numéro de rue. */
+    private function address(string $ville): string
+    {
+        return 'Quartier ' . $ville . ', ' . $this->faker->randomElement([
+            'face à l\'école primaire',
+            'près du marché',
+            'derrière la station',
+            'non loin du dispensaire',
+            'à côté de la pharmacie',
+            'en face du terrain de football',
+            'près du château d\'eau',
+        ]);
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Socle pédagogique                                                   */
     /* ------------------------------------------------------------------ */
 
@@ -281,7 +396,7 @@ class DemoSeeder extends Seeder
                 'email'             => 'prof' . ($i + 1) . '@dalibi.tg',
                 'gender'            => $gender,
                 'telephone'         => '+228 9' . $this->faker->numerify('# ## ## ##'),
-                'address'           => $this->faker->streetAddress() . ', Lomé',
+                'address'           => $this->address($this->origin()['ville'] ?? 'Lomé'),
                 'password'          => Hash::make('password123'),
                 'is_demo'           => true,
                 'email_verified_at' => now(),
@@ -353,6 +468,13 @@ class DemoSeeder extends Seeder
         };
         $seq = Student::query()->count() + 1;
 
+        $origin = $this->origin();
+        $ville  = $origin['ville'] ?? 'Lomé';
+
+        // Beaucoup d'élèves scolarisés à Lomé sont nés à l'intérieur du pays :
+        // un quart se voit attribuer une autre localité de naissance.
+        $naissance = $this->faker->boolean(25) ? ($this->origin()['ville'] ?? $ville) : $ville;
+
         $user = User::create([
             'firstname'         => $firstname,
             'lastname'          => $lastname,
@@ -360,7 +482,7 @@ class DemoSeeder extends Seeder
             'gender'            => $gender,
             'birth_date'        => $this->today->subYears($age)->toDateString(),
             'telephone'         => '+228 9' . $this->faker->numerify('# ## ## ##'),
-            'address'           => $this->faker->streetAddress() . ', Lomé',
+            'address'           => $this->address($ville),
             'password'          => Hash::make('password123'),
             'is_demo'           => true,
             'email_verified_at' => now(),
@@ -373,12 +495,12 @@ class DemoSeeder extends Seeder
             'lastname'       => $lastname,
             'gender'         => $gender,
             'birth_date'     => $this->today->subYears($age)->toDateString(),
-            'place_of_birth' => $this->faker->randomElement(['Lomé', 'Kara', 'Sokodé', 'Kpalimé', 'Atakpamé', 'Dapaong', 'Tsévié', 'Aného']),
+            'place_of_birth' => $naissance,
             'nationality'    => 'Togolaise',
-            'address'        => $this->faker->streetAddress(),
-            'city'           => 'Lomé',
-            'region'         => 'Maritime',
-            'prefecture'     => 'Golfe',
+            'address'        => $this->address($ville),
+            'city'           => $ville,
+            'region'         => $origin['region'] ?? null,
+            'prefecture'     => $origin['prefecture'] ?? null,
             'phone'          => '+228 9' . $this->faker->numerify('# ## ## ##'),
             'email'          => 'eleve' . $seq . '@dalibi.tg',
             'active'         => true,
