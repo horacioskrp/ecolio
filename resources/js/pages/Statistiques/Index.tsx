@@ -153,8 +153,8 @@ function TreemapNode(props: {
             <rect x={x} y={y} width={width} height={height} fill={fill} stroke={surface} strokeWidth={1.5} rx={2} />
             {width > 46 && height > 26 && (
                 <>
-                    <text x={x + 5} y={y + 15} fontSize={10.5} fontWeight={600} fill={onDark ? '#ffffff' : '#1f2937'}>{label}</text>
-                    <text x={x + 5} y={y + 28} fontSize={10} fill={onDark ? 'rgba(255,255,255,0.85)' : 'rgba(31,41,55,0.7)'}>{value}</text>
+                    <text x={x + 5} y={y + 15} fontSize={11} fontWeight={400} fill={onDark ? '#ffffff' : '#1f2937'}>{label}</text>
+                    <text x={x + 5} y={y + 28} fontSize={10} fontWeight={400} fill={onDark ? 'rgba(255,255,255,0.9)' : 'rgba(31,41,55,0.75)'}>{value}</text>
                 </>
             )}
         </g>
