@@ -177,6 +177,7 @@ class DemoSeeder extends Seeder
             return;
         }
 
+        $this->step('Âges attendus des classes', fn () => $this->seedExpectedAges());
         $this->step('Barème et modèle de bulletin', fn () => $this->seedGradingConfig());
         $this->step('Enseignants', fn () => $this->seedTeachers());
         $this->step('Élèves et inscriptions', fn () => $this->seedStudentsAndEnrollments());
@@ -440,6 +441,26 @@ class DemoSeeder extends Seeder
     /* ------------------------------------------------------------------ */
     /* Socle pédagogique                                                   */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Âge normal attendu par classe (l'entrée en CP1 se fait vers 6 ans). Alimente
+     * le calcul du sur-âge (retard scolaire) des statistiques, resté vide sans lui.
+     * Idempotent : ne touche que les classes dont l'âge attendu n'est pas renseigné.
+     */
+    private function seedExpectedAges(): void
+    {
+        $ages = [
+            'PS' => 3, 'MS' => 4, 'GS' => 5,
+            'CP1' => 6, 'CP2' => 7, 'CE1' => 8, 'CE2' => 9, 'CM1' => 10, 'CM2' => 11,
+            '6ème' => 12, '5ème' => 13, '4ème' => 14, '3ème' => 15,
+            '2nd A' => 16, '2nd S' => 16, '1ère A4' => 17, '1ère D' => 17, '1ère C' => 17,
+            'Tle A4' => 18, 'Tle D' => 18, 'Tle C' => 18,
+        ];
+
+        foreach ($ages as $code => $age) {
+            Classroom::query()->where('code', $code)->whereNull('expected_age')->update(['expected_age' => $age]);
+        }
+    }
 
     /**
      * Barème de notation et modèle de bulletin.
