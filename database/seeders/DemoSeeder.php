@@ -345,6 +345,69 @@ class DemoSeeder extends Seeder
     }
 
     /* ------------------------------------------------------------------ */
+    /* Noms togolais                                                       */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Prénoms masculins togolais : d'abord les prénoms « jour de naissance »
+     * éwé/mina (majorité dans le sud et à Lomé), puis des prénoms courants,
+     * quelques prénoms du Nord et musulmans, et une minorité de prénoms chrétiens
+     * — reflet du métissage réel des registres d'état civil.
+     */
+    private const FIRST_NAMES_MALE = [
+        'Kossi', 'Kossivi', 'Koffi', 'Kodjo', 'Kodzo', 'Komlan', 'Kokou', 'Koku',
+        'Yao', 'Yaovi', 'Komi', 'Kwami', 'Mensah', 'Sena', 'Selom', 'Elom', 'Edem',
+        'Etsé', 'Mawuli', 'Mawuko', 'Mawulom', 'Sitsopé', 'Delali', 'Senyo',
+        'Worlanyo', 'Dodji', 'Kekeli', 'Elolo', 'Enyo', 'Sedem', 'Amevor', 'Fofo',
+        'Essohanam', 'Essowè', 'Bawa', 'Kpatcha', 'Wiyao', 'Nadjombe', 'Tchalim',
+        'Abalo', 'Ouro-Djeri', 'Ibrahim', 'Moussa', 'Salifou', 'Zakari', 'Aboubakar',
+        'Emmanuel', 'Innocent', 'Prosper', 'Firmin', 'Célestin', 'Sylvain',
+    ];
+
+    /** Prénoms féminins togolais, même logique que la liste masculine. */
+    private const FIRST_NAMES_FEMALE = [
+        'Akossiwa', 'Afiwa', 'Afiavi', 'Ablavi', 'Abla', 'Adjovi', 'Adjo', 'Adzoa',
+        'Akouvi', 'Akou', 'Akoua', 'Akuvi', 'Ayaba', 'Ayawavi', 'Ama', 'Amivi', 'Ami',
+        'Enyonam', 'Elolo', 'Delali', 'Senam', 'Sena', 'Akpene', 'Akpédjé', 'Sitsopé',
+        'Mawunyo', 'Mawusi', 'Yayra', 'Woelali', 'Kafui', 'Essohana', 'Massan', 'Tchaa',
+        'Abira', 'Fatimata', 'Aminata', 'Aïcha', 'Ramatou', 'Latifa', 'Salamatou',
+        'Rafiatou', 'Zenabou', 'Delphine', 'Honorine', 'Perpétue', 'Bernadette',
+        'Philomène', 'Georgette', 'Véronique',
+    ];
+
+    /**
+     * Noms de famille togolais : patronymes éwé/mina et guin, quelques noms du Nord
+     * (kabyè, tem), et des noms de familles afro-brésiliennes de Lomé (de Souza,
+     * d'Almeida...) bien réelles. Écrits en capitales à l'usage, comme sur les
+     * registres officiels.
+     */
+    private const SURNAMES = [
+        'Adjaho', 'Agbeko', 'Agbodjan', 'Agbenou', 'Akakpo', 'Akoto', 'Amegan',
+        'Amenumey', 'Ametepe', 'Amouzou', 'Anani', 'Apedo', 'Assih', 'Assignon',
+        'Atsou', 'Ayité', 'Bedou', 'Dogbe', 'Dossou', 'Djondo', 'Edorh', 'Gbedemah',
+        'Kougblenou', 'Kouma', 'Lawson', 'Mensah', 'Nyamadi', 'Sossou', 'Tay',
+        'Tettey', 'Tossou', 'Zinsou', 'Bawara', 'Boukari', 'Djobo', 'Eklou', 'Folivi',
+        'Kpatcha', 'Natchaba', 'Palanga', 'Tchangai', 'Tchani', 'Aholou', 'Attiogbé',
+        'Ayassou', 'Gakpe', 'Hodabalo', 'Lokossou', 'Segbedji', 'Vigan', 'Amoussou',
+        'Bassah', 'Danyo', 'Fiawoo', 'Koffigan', 'Sogadji', 'de Souza', 'd\'Almeida',
+        'de Medeiros', 'Santos', 'Johnson', 'Ajavon', 'Aithnard', 'Quist', 'Vovor',
+    ];
+
+    /** Prénom togolais correspondant au sexe. */
+    private function togoFirstName(string $gender): string
+    {
+        return $this->faker->randomElement(
+            $gender === 'female' ? self::FIRST_NAMES_FEMALE : self::FIRST_NAMES_MALE,
+        );
+    }
+
+    /** Nom de famille togolais (casse d'origine ; capitaliser à l'affichage si besoin). */
+    private function togoSurname(): string
+    {
+        return $this->faker->randomElement(self::SURNAMES);
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Socle pédagogique                                                   */
     /* ------------------------------------------------------------------ */
 
@@ -387,8 +450,8 @@ class DemoSeeder extends Seeder
             // Le sexe est tiré d'abord : le prénom en découle, sinon la liste des
             // enseignants affiche des « Pauline » déclarées masculines.
             $gender    = $this->faker->randomElement(['male', 'female']);
-            $firstname = $this->faker->firstName($gender);
-            $lastname  = Str::upper($this->faker->lastName());
+            $firstname = $this->togoFirstName($gender);
+            $lastname  = Str::upper($this->togoSurname());
 
             $user = User::create([
                 'firstname'         => $firstname,
@@ -457,8 +520,8 @@ class DemoSeeder extends Seeder
     private function createStudent(Classroom $class): Student
     {
         $gender    = $this->faker->randomElement(['male', 'female']);
-        $firstname = $this->faker->firstName($gender === 'male' ? 'male' : 'female');
-        $lastname  = Str::upper($this->faker->lastName());
+        $firstname = $this->togoFirstName($gender);
+        $lastname  = Str::upper($this->togoSurname());
 
         // L'âge suit le niveau : un CP1 de 17 ans décrédibiliserait toute la démo.
         $age  = match ($this->cycleOf($class)) {
@@ -516,12 +579,12 @@ class DemoSeeder extends Seeder
 
         StudentParent::create([
             'student_id'        => $student->id,
-            'father_firstname'  => $this->faker->firstName('male'),
+            'father_firstname'  => $this->togoFirstName('male'),
             'father_lastname'   => $lastname,
             'father_profession' => $this->faker->randomElement(['Enseignant', 'Commerçant', 'Agriculteur', 'Fonctionnaire', 'Chauffeur', 'Menuisier', 'Infirmier']),
             'father_phone'      => '+228 9' . $this->faker->numerify('# ## ## ##'),
-            'mother_firstname'  => $this->faker->firstName('female'),
-            'mother_lastname'   => Str::upper($this->faker->lastName()),
+            'mother_firstname'  => $this->togoFirstName('female'),
+            'mother_lastname'   => Str::upper($this->togoSurname()),
             'mother_profession' => $this->faker->randomElement(['Commerçante', 'Couturière', 'Enseignante', 'Infirmière', 'Coiffeuse', 'Secrétaire']),
             'mother_phone'      => '+228 9' . $this->faker->numerify('# ## ## ##'),
             'email'             => 'parent' . $seq . '@dalibi.tg',
@@ -532,7 +595,7 @@ class DemoSeeder extends Seeder
             'blood_group'             => $this->faker->randomElement(['A+', 'A-', 'B+', 'B-', 'AB+', 'O+', 'O-']),
             'allergies'               => $this->faker->optional(0.2)->randomElement(['Arachides', 'Poussière', 'Pollen', 'Fruits de mer']),
             'vaccinations'            => 'DTC-Polio-Hib-HepB',
-            'emergency_contact_name'  => $this->faker->name(),
+            'emergency_contact_name'  => Str::upper($this->togoSurname()) . ' ' . $this->togoFirstName($this->faker->randomElement(['male', 'female'])),
             'emergency_contact_phone' => '+228 9' . $this->faker->numerify('# ## ## ##'),
         ]);
 
