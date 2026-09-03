@@ -48,16 +48,25 @@ class StatisticsService
         $other  = (int) ($byGender['other'] ?? 0);
         $total  = $male + $female + $other;
 
-        // Effectifs par classe
+        // Effectifs par classe (avec cycle, pour le filtre côté client)
         $byClass = (clone $base)
             ->join('classes', 'enrollments.class_id', '=', 'classes.id')
-            ->selectRaw('classes.name AS name,
+            ->leftJoin('classroom_types', 'classroom_types.id', '=', 'classes.classroom_type_id')
+            ->selectRaw('classes.name AS name, classroom_types.name AS cycle,
                 COUNT(DISTINCT CASE WHEN students.gender = ? THEN students.id END) AS male,
                 COUNT(DISTINCT CASE WHEN students.gender = ? THEN students.id END) AS female,
                 COUNT(DISTINCT students.id) AS total', ['male', 'female'])
-            ->groupBy('classes.name')
-            ->orderByDesc('total')
-            ->get();
+            ->groupBy('classes.name', 'classroom_types.name', 'classes.expected_age')
+            ->orderByRaw('classes.expected_age NULLS LAST')
+            ->orderBy('classes.name')
+            ->get()
+            ->map(fn ($r) => [
+                'name'   => $r->name,
+                'cycle'  => $this->cycleLabel($r->cycle),
+                'male'   => (int) $r->male,
+                'female' => (int) $r->female,
+                'total'  => (int) $r->total,
+            ]);
 
         // Répartition par statut académique (promotion / redoublement / abandon)
         $status = (clone $base)
@@ -73,28 +82,48 @@ class StatisticsService
         $decided   = $valide + $nonValide + $abandon; // décisions de fin d'année
         $enrolTotal = $valide + $nonValide + $abandon + $transfere + $enCours;
 
-        // Distribution des âges (calcul PHP, portable pgsql/sqlite)
-        $ages = (clone $base)
+        // Distribution des âges PAR SEXE (calcul PHP, portable pgsql/sqlite) —
+        // alimente la pyramide des âges garçons/filles.
+        $ageRows = (clone $base)
             ->whereNotNull('students.birth_date')
-            ->pluck('students.birth_date')
-            ->map(fn ($d) => Carbon::parse($d)->age)
-            ->filter(fn ($a) => $a >= 2 && $a <= 30);
+            ->get(['students.birth_date', 'students.gender']);
         $ageBuckets = [];
-        foreach ($ages as $age) {
-            $ageBuckets[$age] = ($ageBuckets[$age] ?? 0) + 1;
+        $ages = [];
+        foreach ($ageRows as $r) {
+            $age = Carbon::parse($r->birth_date)->age;
+            if ($age < 2 || $age > 30) {
+                continue;
+            }
+            $ages[] = $age;
+            $ageBuckets[$age] ??= ['male' => 0, 'female' => 0];
+            if ($r->gender === 'male') {
+                $ageBuckets[$age]['male']++;
+            } elseif ($r->gender === 'female') {
+                $ageBuckets[$age]['female']++;
+            }
         }
         ksort($ageBuckets);
-        $ageDistribution = collect($ageBuckets)->map(fn ($n, $a) => ['age' => (int) $a, 'total' => $n])->values();
+        $ageDistribution = collect($ageBuckets)->map(fn ($g, $a) => [
+            'age'    => (int) $a,
+            'male'   => $g['male'],
+            'female' => $g['female'],
+            'total'  => $g['male'] + $g['female'],
+        ])->values();
+        $ages = collect($ages);
 
-        // Origine géographique (top villes)
+        // Origine géographique (top villes), ventilée par sexe
         $byCity = (clone $base)
             ->whereNotNull('students.city')
             ->where('students.city', '!=', '')
-            ->selectRaw('students.city AS city, COUNT(DISTINCT students.id) AS total')
+            ->selectRaw("students.city AS city,
+                COUNT(DISTINCT students.id) AS total,
+                COUNT(DISTINCT CASE WHEN students.gender = 'male' THEN students.id END) AS male,
+                COUNT(DISTINCT CASE WHEN students.gender = 'female' THEN students.id END) AS female")
             ->groupBy('students.city')
             ->orderByDesc('total')
             ->limit(10)
-            ->get();
+            ->get()
+            ->map(fn ($r) => ['city' => $r->city, 'male' => (int) $r->male, 'female' => (int) $r->female, 'total' => (int) $r->total]);
 
         $rate = fn (int $n, int $d) => $d > 0 ? round($n / $d * 100, 1) : 0.0;
 
@@ -508,6 +537,21 @@ class StatisticsService
             'comparaisons' => $this->trendsStats($filters),
             'geographie'   => $this->geographyStats($filters),
             default        => $this->enrollmentStats($filters),
+        };
+    }
+
+    /** Cycle court à partir du libellé du type de classe (pour le filtre des charts). */
+    private function cycleLabel(?string $type): string
+    {
+        $t = Str::lower($type ?? '');
+
+        return match (true) {
+            str_contains($t, 'maternelle') => 'Maternelle',
+            str_contains($t, 'primaire')   => 'Primaire',
+            str_contains($t, 'collège')    => 'Collège',
+            str_contains($t, 'technique')  => 'Lycée technique',
+            str_contains($t, 'lycée')      => 'Lycée',
+            default                        => 'Autre',
         };
     }
 }

@@ -23,12 +23,12 @@ interface Enrollment {
     gender: { male: number; female: number; other: number };
     ips: number | null;
     part_filles: number;
-    by_class: { name: string; male: number; female: number; total: number }[];
+    by_class: { name: string; cycle: string; male: number; female: number; total: number }[];
     academic_status: Record<string, number>;
     rates: { promotion: number; redoublement: number; abandon: number };
-    age_distribution: { age: number; total: number }[];
+    age_distribution: { age: number; male: number; female: number; total: number }[];
     age_moyen: number | null;
-    by_city: { city: string; total: number }[];
+    by_city: { city: string; male: number; female: number; total: number }[];
     over_age: { evaluated: number; count: number; rate: number; threshold: number };
 }
 interface Finance {
@@ -211,6 +211,18 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
         { key: 'geographie', label: 'Géographie', icon: MapPin },
     ];
 
+    /* ---- Effectifs & parité : filtre par cycle sur les classes, pyramide des âges. ---- */
+    const effCycles = [...new Set(enrollment.by_class.map((c) => c.cycle))];
+    const [effCycle, setEffCycle] = useState<string>('Tous');
+    const [effSort, setEffSort] = useState<'niveau' | 'effectif'>('niveau');
+    const effClasses = (() => {
+        const f = enrollment.by_class.filter((c) => effCycle === 'Tous' || c.cycle === effCycle);
+        return effSort === 'effectif' ? [...f].sort((a, b) => b.total - a.total) : f;
+    })();
+    // Pyramide des âges par sexe : garçons à gauche (valeurs négatives), filles à droite.
+    const agePyramid = enrollment.age_distribution.map((d) => ({ age: d.age, male: -d.male, female: d.female }));
+    const ageAxisMax = Math.max(1, ...enrollment.age_distribution.map((d) => Math.max(d.male, d.female)));
+
     /* ---- Comparaisons : l'année active est en cours, ses taux de fin d'année
        (redoublement, abandon, admission) ne sont pas encore décidés. On les met à
        null pour que les courbes s'arrêtent au lieu de plonger à zéro. ---- */
@@ -337,13 +349,32 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                         </div>
                         <div className="grid lg:grid-cols-3 gap-5">
                             <div className="lg:col-span-2"><Card title="Effectifs par classe (garçons / filles)" icon={<Users className="w-4 h-4" />}>
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    {['Tous', ...effCycles].map((c) => (
+                                        <button key={c} type="button" onClick={() => setEffCycle(c)}
+                                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${effCycle === c ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+                                            {c}
+                                        </button>
+                                    ))}
+                                    <div className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                                        <span className="mr-1">Tri</span>
+                                        {(['niveau', 'effectif'] as const).map((s) => (
+                                            <button key={s} type="button" onClick={() => setEffSort(s)}
+                                                className={`px-2 py-1 rounded-md transition-colors ${effSort === s ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                                {s === 'niveau' ? 'Par niveau' : 'Par effectif'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                                 <ResponsiveContainer width="100%" height={260}>
-                                    <BarChart data={enrollment.by_class}>
-                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                                    <BarChart data={effClasses} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: theme.tick }} axisLine={false} tickLine={false} interval={0} angle={-25} textAnchor="end" height={62} />
                                         <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
-                                        <RTooltip />
-                                        <Bar dataKey="male" name="Garçons" stackId="a" fill={BLUE} radius={[0, 0, 0, 0]} />
-                                        <Bar dataKey="female" name="Filles" stackId="a" fill={ORANGE} radius={[4, 4, 0, 0]} />
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="male" name="Garçons" stackId="a" fill={BLUE} maxBarSize={44} />
+                                        <Bar dataKey="female" name="Filles" stackId="a" fill={ORANGE} radius={[4, 4, 0, 0]} maxBarSize={44} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </Card></div>
@@ -361,13 +392,16 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                             </Card>
                         </div>
                         <div className="grid lg:grid-cols-2 gap-5">
-                            <Card title="Pyramide des âges" icon={<BarChart3 className="w-4 h-4" />}>
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <BarChart data={enrollment.age_distribution}>
-                                        <XAxis dataKey="age" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
-                                        <RTooltip />
-                                        <Bar dataKey="total" name="Élèves" fill={VIOLET} radius={[4, 4, 0, 0]} />
+                            <Card title="Pyramide des âges (garçons / filles)" icon={<BarChart3 className="w-4 h-4" />}>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart layout="vertical" data={agePyramid} stackOffset="sign" margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                        <XAxis type="number" domain={[-ageAxisMax, ageAxisMax]} tickFormatter={(v) => `${Math.abs(Number(v))}`} tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                        <YAxis type="category" dataKey="age" reversed tick={{ fontSize: 11, fill: theme.axis }} axisLine={false} tickLine={false} width={28} />
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v, n) => [Math.abs(Number(v)), n]} labelFormatter={(l) => `${l} ans`} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="male" name="Garçons" stackId="pyr" fill={BLUE} maxBarSize={18} />
+                                        <Bar dataKey="female" name="Filles" stackId="pyr" fill={ORANGE} maxBarSize={18} />
                                     </BarChart>
                                 </ResponsiveContainer>
                                 <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm">
@@ -379,16 +413,21 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                 </div>
                                 {enrollment.over_age.evaluated === 0 && <p className="text-xs text-gray-400 mt-1.5">Renseignez l'âge attendu sur les classes pour activer ce calcul.</p>}
                             </Card>
-                            <Card title="Origine géographique (top villes)" icon={<Users className="w-4 h-4" />}>
+                            <Card title="Origine géographique (top villes, par sexe)" icon={<Users className="w-4 h-4" />}>
                                 {enrollment.by_city.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">Non renseigné</p> : (
-                                    <div className="space-y-2">
-                                        {enrollment.by_city.map((c) => (
-                                            <div key={c.city} className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-700 dark:text-gray-300">{c.city}</span>
-                                                <span className="font-semibold">{c.total}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <ResponsiveContainer width="100%" height={Math.max(220, enrollment.by_city.length * 28 + 24)}>
+                                        <BarChart layout="vertical" data={enrollment.by_city} margin={{ top: 4, right: 28, left: 8, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                            <YAxis type="category" dataKey="city" width={92} tick={{ fontSize: 11, fill: theme.axis }} axisLine={false} tickLine={false} />
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
+                                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                                            <Bar dataKey="male" name="Garçons" stackId="c" fill={BLUE} maxBarSize={20} />
+                                            <Bar dataKey="female" name="Filles" stackId="c" fill={ORANGE} radius={[0, 4, 4, 0]} maxBarSize={20}>
+                                                <LabelList dataKey="total" position="right" style={{ fontSize: 11, fill: theme.tick }} />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 )}
                             </Card>
                         </div>
