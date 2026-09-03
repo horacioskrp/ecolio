@@ -205,7 +205,11 @@ class BulletinRenderer
             return $this->num($line['by_type'][substr($source, 5)] ?? null);
         }
 
-        return $this->num($line[$source] ?? null);
+        // La source « composition » (NOTE_SOURCES / colonnes) correspond à la clé
+        // « compo » du snapshot : sans cet alias la colonne Compo reste toujours vide.
+        $key = $source === 'composition' ? 'compo' : $source;
+
+        return $this->num($line[$key] ?? null);
     }
 
     private function infoBlock(array $p): string
