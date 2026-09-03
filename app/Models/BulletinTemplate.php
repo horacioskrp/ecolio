@@ -60,7 +60,7 @@ class BulletinTemplate extends Model
     {
         return [
             ['key' => 'subject',      'label' => 'Matières',      'width' => 24, 'type' => 'subject',      'source' => null],
-            ['key' => 'classe',       'label' => 'Classe',        'width' => 9,  'type' => 'note',         'source' => 'classe'],
+            ['key' => 'classe',       'label' => 'Devoir',        'width' => 9,  'type' => 'note',         'source' => 'classe'],
             ['key' => 'compo',        'label' => 'Compo',         'width' => 9,  'type' => 'note',         'source' => 'composition'],
             ['key' => 'coef',         'label' => 'Coef',          'width' => 6,  'type' => 'coefficient',  'source' => null],
             ['key' => 'moyenne',      'label' => 'Moy. {periode}', 'width' => 10, 'type' => 'note',        'source' => 'moyenne'],
