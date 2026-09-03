@@ -2,8 +2,8 @@ import { Head, router } from '@inertiajs/react';
 import { BarChart3, Download, FileSpreadsheet, GraduationCap, Layers, MapPin, PieChart as PieIcon, School, TrendingUp, UserCheck, Users, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import {
-    Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
-    ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis,
+    Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart,
+    ResponsiveContainer, Tooltip as RTooltip, Treemap, XAxis, YAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -109,6 +109,55 @@ function Card({ title, icon, children }: { title: string; icon?: React.ReactNode
     );
 }
 
+/**
+ * Nœud du treemap géographique. La région (depth 1) est un cadre étiqueté ; la
+ * préfecture (feuille) est remplie par une rampe séquentielle selon son effectif
+ * (magnitude → teinte, jamais une couleur par région, indistinguable au-delà de
+ * trois ou quatre catégories). L'identité passe par les libellés.
+ */
+function TreemapNode(props: {
+    x?: number; y?: number; width?: number; height?: number; depth?: number;
+    name?: string; value?: number; sequential?: readonly string[]; surface?: string;
+    axis?: string; tick?: string; maxLeaf?: number;
+}) {
+    const { x = 0, y = 0, width = 0, height = 0, depth = 0, name = '', value = 0 } = props;
+    const seq = props.sequential ?? ['#bfdbfe', '#60a5fa', '#2a78d6', '#1e3a8a'];
+    const surface = props.surface ?? '#fff';
+
+    // Racine : ne rien peindre, sinon un grand rectangle recouvrirait tout le treemap.
+    if (depth === 0) {
+        return <g />;
+    }
+
+    if (depth === 1) {
+        return (
+            <g>
+                <rect x={x} y={y} width={width} height={height} fill="none" stroke={surface} strokeWidth={3} />
+                {width > 64 && height > 18 && (
+                    <text x={x + 6} y={y + 15} fontSize={12} fontWeight={700} fill={props.axis ?? '#374151'}>{name}</text>
+                )}
+            </g>
+        );
+    }
+
+    const ratio = props.maxLeaf && props.maxLeaf > 0 ? value / props.maxLeaf : 0;
+    const idx = Math.min(seq.length - 1, Math.max(0, Math.round(ratio * (seq.length - 1))));
+    const onDark = idx >= seq.length - 2;
+    const label = name.length > 15 ? `${name.slice(0, 14)}…` : name;
+
+    return (
+        <g>
+            <rect x={x} y={y} width={width} height={height} fill={seq[idx]} stroke={surface} strokeWidth={1.5} rx={2} />
+            {width > 46 && height > 26 && (
+                <>
+                    <text x={x + 5} y={y + 15} fontSize={10.5} fontWeight={600} fill={onDark ? '#ffffff' : (props.axis ?? '#374151')}>{label}</text>
+                    <text x={x + 5} y={y + 28} fontSize={10} fill={onDark ? 'rgba(255,255,255,0.85)' : (props.tick ?? '#9ca3af')}>{value}</text>
+                </>
+            )}
+        </g>
+    );
+}
+
 /* ---------------- Page ---------------- */
 type Tab = 'effectifs' | 'finances' | 'reussite' | 'encadrement' | 'assiduite' | 'comparaisons' | 'geographie';
 
@@ -158,6 +207,52 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
         { key: 'comparaisons', label: 'Comparaisons', icon: TrendingUp },
         { key: 'geographie', label: 'Géographie', icon: MapPin },
     ];
+
+    /* ---- Comparaisons : l'année active est en cours, ses taux de fin d'année
+       (redoublement, abandon, admission) ne sont pas encore décidés. On les met à
+       null pour que les courbes s'arrêtent au lieu de plonger à zéro. ---- */
+    const activeYearLabel = academicYears.find((y) => y.active)?.year;
+    type TrendKey = 'effectif' | 'part_filles' | 'redoublement' | 'abandon' | 'recouvrement' | 'reussite' | 'admission';
+    const endOfYearKeys: TrendKey[] = ['redoublement', 'abandon', 'admission'];
+    const trendSeries = trends.series.map((p) => {
+        const inProgress = p.year === activeYearLabel;
+        return {
+            ...p,
+            redoublement: inProgress ? null : p.redoublement,
+            abandon: inProgress ? null : p.abandon,
+            admission: inProgress ? null : p.admission,
+        } as Record<string, number | string | null>;
+    });
+    // Dernier point renseigné vs le précédent, par métrique (les taux de fin
+    // d'année sautent l'année en cours ; les autres non).
+    const metricDelta = (key: TrendKey) => {
+        const pts = trendSeries.filter((p) => p[key] != null);
+        const cur = pts[pts.length - 1];
+        const prv = pts[pts.length - 2];
+        if (!cur) return null;
+        const value = cur[key] as number;
+        const delta = prv ? Math.round((value - (prv[key] as number)) * 10) / 10 : null;
+        return { year: cur.year as string, value, delta };
+    };
+    const isPct = (k: TrendKey) => k !== 'effectif';
+    const trendKpis: { key: TrendKey; label: string; higherIsBetter: boolean }[] = [
+        { key: 'effectif', label: 'Effectif', higherIsBetter: true },
+        { key: 'reussite', label: 'Réussite', higherIsBetter: true },
+        { key: 'recouvrement', label: 'Recouvrement', higherIsBetter: true },
+        { key: 'abandon', label: 'Abandon', higherIsBetter: false },
+    ];
+
+    /* ---- Géographie : concentration et hiérarchie région → préfecture. ---- */
+    const grandLomeNames = ['Golfe', 'Agoè-Nyivé'];
+    const grandLomeTotal = geography.by_prefecture.filter((p) => grandLomeNames.includes(p.name)).reduce((s, p) => s + p.total, 0);
+    const grandLomeShare = geography.localized > 0 ? Math.round((grandLomeTotal / geography.localized) * 1000) / 10 : 0;
+    const maxLeaf = geography.by_prefecture.reduce((m, p) => Math.max(m, p.total), 0);
+    const treemapData = geography.by_region
+        .map((r) => ({
+            name: r.name,
+            children: geography.by_prefecture.filter((p) => p.region === r.name).map((p) => ({ name: p.name, size: p.total })),
+        }))
+        .filter((r) => r.children.length > 0);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -458,37 +553,88 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                 {/* ---- Comparaisons pluriannuelles ---- */}
                 {tab === 'comparaisons' && (
                     <div className="space-y-6">
-                        {trends.series.length < 2 && (
+                        {trends.series.length < 2 ? (
                             <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm px-4 py-3">
                                 Les tendances se précisent avec au moins deux années académiques renseignées.
                             </div>
+                        ) : (
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                {trendKpis.map(({ key, label, higherIsBetter }) => {
+                                    const d = metricDelta(key);
+                                    if (!d) return null;
+                                    const up = d.delta != null && d.delta > 0;
+                                    const good = d.delta == null ? null : up === higherIsBetter;
+                                    const deltaColor = good == null ? 'text-gray-400' : good ? 'text-emerald-600' : 'text-red-500';
+                                    return (
+                                        <div key={key} className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card p-4 shadow-sm">
+                                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+                                            <p className="text-2xl font-bold mt-1 text-gray-900 dark:text-white">
+                                                {isPct(key) ? `${d.value}%` : d.value}
+                                            </p>
+                                            <p className="text-xs mt-1 flex items-center gap-1">
+                                                {d.delta == null ? (
+                                                    <span className="text-gray-400">—</span>
+                                                ) : (
+                                                    <span className={`font-semibold ${deltaColor}`}>
+                                                        {up ? '↑' : d.delta < 0 ? '↓' : '='} {d.delta > 0 ? '+' : ''}{d.delta}{isPct(key) ? ' pts' : ''}
+                                                    </span>
+                                                )}
+                                                <span className="text-gray-400">· {d.year}</span>
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         )}
+
                         <div className="grid lg:grid-cols-2 gap-5">
                             <Card title="Évolution de l'effectif" icon={<Users className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
-                                    <LineChart data={trends.series}>
+                                    <AreaChart data={trends.series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="effGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor={BLUE} stopOpacity={0.28} />
+                                                <stop offset="100%" stopColor={BLUE} stopOpacity={0.02} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
                                         <XAxis dataKey="year" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
                                         <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
-                                        <RTooltip />
-                                        <Line type="monotone" dataKey="effectif" name="Effectif" stroke={BLUE} strokeWidth={2.5} dot={{ r: 3 }} />
-                                    </LineChart>
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
+                                        <Area type="monotone" dataKey="effectif" name="Effectif" stroke={BLUE} strokeWidth={2.5} fill="url(#effGrad)" dot={{ r: 3, fill: BLUE }} />
+                                    </AreaChart>
                                 </ResponsiveContainer>
                             </Card>
-                            <Card title="Évolution des taux (%)" icon={<TrendingUp className="w-4 h-4" />}>
+                            <Card title="Performance (%)" icon={<TrendingUp className="w-4 h-4" />}>
                                 <ResponsiveContainer width="100%" height={260}>
-                                    <LineChart data={trends.series}>
+                                    <LineChart data={trends.series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
                                         <XAxis dataKey="year" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
-                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} />
-                                        <RTooltip />
+                                        <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} domain={[0, 100]} />
+                                        <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => `${v}%`} />
                                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                                        <Line type="monotone" dataKey="recouvrement" name="Recouvrement" stroke={GREEN} strokeWidth={2} dot={{ r: 2 }} />
-                                        <Line type="monotone" dataKey="reussite" name="Réussite" stroke={BLUE} strokeWidth={2} dot={{ r: 2 }} />
-                                        <Line type="monotone" dataKey="redoublement" name="Redoublement" stroke={ORANGE} strokeWidth={2} dot={{ r: 2 }} />
-                                        <Line type="monotone" dataKey="abandon" name="Abandon" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
+                                        <Line type="monotone" dataKey="reussite" name="Réussite" stroke={GREEN} strokeWidth={2.5} dot={{ r: 3, fill: GREEN }} />
+                                        <Line type="monotone" dataKey="recouvrement" name="Recouvrement" stroke={BLUE} strokeWidth={2.5} dot={{ r: 3, fill: BLUE }} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </Card>
                         </div>
+
+                        <Card title="Déperdition scolaire (%)" icon={<TrendingUp className="w-4 h-4" />}>
+                            <ResponsiveContainer width="100%" height={240}>
+                                <LineChart data={trendSeries} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+                                    <XAxis dataKey="year" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={36} />
+                                    <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => `${v}%`} />
+                                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    <Line type="monotone" dataKey="redoublement" name="Redoublement" stroke={ORANGE} strokeWidth={2.5} dot={{ r: 3, fill: ORANGE }} connectNulls={false} />
+                                    <Line type="monotone" dataKey="abandon" name="Abandon" stroke={VIOLET} strokeWidth={2.5} dot={{ r: 3, fill: VIOLET }} connectNulls={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                            <p className="text-xs text-gray-400 mt-2">L&apos;année en cours n&apos;est pas tracée : les décisions de fin d&apos;année (redoublement, abandon) ne sont pas encore arrêtées.</p>
+                        </Card>
+
                         <Card title="Tableau comparatif" icon={<BarChart3 className="w-4 h-4" />}>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -496,12 +642,17 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                         <th className="py-2">Année</th><th className="py-2 text-right">Effectif</th><th className="py-2 text-right">% filles</th>
                                         <th className="py-2 text-right">Redoubl.</th><th className="py-2 text-right">Abandon</th><th className="py-2 text-right">Recouvr.</th>
                                         <th className="py-2 text-right">Réussite</th><th className="py-2 text-right">Admission</th></tr></thead>
-                                    <tbody>{trends.series.map((r) => (
-                                        <tr key={r.year} className="border-b border-gray-50 dark:border-gray-700/50">
-                                            <td className="py-2 font-medium">{r.year}</td><td className="py-2 text-right">{r.effectif}</td><td className="py-2 text-right">{r.part_filles}%</td>
-                                            <td className="py-2 text-right">{r.redoublement}%</td><td className="py-2 text-right">{r.abandon}%</td><td className="py-2 text-right">{r.recouvrement}%</td>
-                                            <td className="py-2 text-right">{r.reussite}%</td><td className="py-2 text-right">{r.admission}%</td>
-                                        </tr>))}</tbody>
+                                    <tbody>{trendSeries.map((r) => {
+                                        const pct = (v: number | string | null) => (v == null ? '—' : `${v}%`);
+                                        return (
+                                            <tr key={String(r.year)} className="border-b border-gray-50 dark:border-gray-700/50">
+                                                <td className="py-2 font-medium">{r.year}{r.year === activeYearLabel && <span className="ml-2 text-xs text-blue-500">en cours</span>}</td>
+                                                <td className="py-2 text-right">{r.effectif}</td><td className="py-2 text-right">{r.part_filles}%</td>
+                                                <td className="py-2 text-right">{pct(r.redoublement)}</td><td className="py-2 text-right">{pct(r.abandon)}</td><td className="py-2 text-right">{pct(r.recouvrement)}</td>
+                                                <td className="py-2 text-right">{pct(r.reussite)}</td><td className="py-2 text-right">{pct(r.admission)}</td>
+                                            </tr>
+                                        );
+                                    })}</tbody>
                                 </table>
                             </div>
                         </Card>
@@ -511,39 +662,61 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                 {/* ---- Géographie ---- */}
                 {tab === 'geographie' && (
                     <div className="space-y-6">
-                        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm px-4 py-3">
-                            Origine renseignée pour <strong>{geography.coverage}%</strong> des élèves ({geography.localized} / {geography.total}). Complétez la région/préfecture sur la fiche élève pour affiner.
-                        </div>
                         {geography.by_region.length === 0 ? (
-                            <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card p-12 text-center text-gray-400">
-                                Aucune origine géographique renseignée.
-                            </div>
+                            <>
+                                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm px-4 py-3">
+                                    Origine renseignée pour <strong>{geography.coverage}%</strong> des élèves ({geography.localized} / {geography.total}). Complétez la région/préfecture sur la fiche élève pour affiner.
+                                </div>
+                                <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card p-12 text-center text-gray-400">
+                                    Aucune origine géographique renseignée.
+                                </div>
+                            </>
                         ) : (
-                            <div className="grid lg:grid-cols-3 gap-5">
-                                <Card title="Par région" icon={<MapPin className="w-4 h-4" />}>
-                                    {/* Six régions dépassent ce qu'une palette catégorielle peut distinguer
-                                        de façon sûre : on passe en barres étiquetées, une seule teinte. */}
-                                    <ResponsiveContainer width="100%" height={260}>
-                                        <BarChart layout="vertical" data={geography.by_region} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                            <>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <Kpi label="Couverture" value={`${geography.coverage}%`} sub={`${geography.localized} / ${geography.total} élèves`} icon={MapPin} tone="text-blue-600" />
+                                    <Kpi label="Grand Lomé" value={`${grandLomeShare}%`} sub="Golfe + Agoè-Nyivé" icon={Users} tone="text-violet-600" />
+                                    <Kpi label="Régions" value={geography.by_region.length} sub="représentées" icon={Layers} tone="text-emerald-600" />
+                                    <Kpi label="Préfectures" value={geography.by_prefecture.length} sub="d'origine" icon={UserCheck} tone="text-orange-600" />
+                                </div>
+
+                                <Card title="Origine des élèves — régions et préfectures" icon={<MapPin className="w-4 h-4" />}>
+                                    {/* Hiérarchie région → préfecture : l'aire porte la magnitude, la teinte
+                                        (rampe séquentielle) l'intensité, les libellés l'identité — jamais une
+                                        couleur par région, indistinguable au-delà de trois ou quatre. */}
+                                    <ResponsiveContainer width="100%" height={380}>
+                                        <Treemap
+                                            data={treemapData}
+                                            dataKey="size"
+                                            aspectRatio={4 / 3}
+                                            stroke={theme.surface}
+                                            isAnimationActive={false}
+                                            content={<TreemapNode sequential={theme.sequential} surface={theme.surface} axis={theme.axis} tick={theme.tick} maxLeaf={maxLeaf} />}
+                                        >
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v} élèves`, 'Effectif']} />
+                                        </Treemap>
+                                    </ResponsiveContainer>
+                                    <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
+                                        <span>Effectif&nbsp;:</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: theme.sequential[0] }} /> faible</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: theme.sequential[theme.sequential.length - 1] }} /> élevé</span>
+                                    </div>
+                                </Card>
+
+                                <Card title="Effectif par région" icon={<BarChart3 className="w-4 h-4" />}>
+                                    <ResponsiveContainer width="100%" height={220}>
+                                        <BarChart layout="vertical" data={geography.by_region} margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
                                             <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
                                             <YAxis type="category" dataKey="name" width={104} tick={{ fontSize: 12, fill: theme.axis }} axisLine={false} tickLine={false} />
-                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} />
-                                            <Bar dataKey="total" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={22} />
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v} élèves`, 'Effectif']} />
+                                            <Bar dataKey="total" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={26}>
+                                                <LabelList dataKey="total" position="right" style={{ fontSize: 11, fill: theme.tick }} />
+                                            </Bar>
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </Card>
-                                <div className="lg:col-span-2"><Card title="Top préfectures d'origine" icon={<BarChart3 className="w-4 h-4" />}>
-                                    <ResponsiveContainer width="100%" height={280}>
-                                        <BarChart data={geography.by_prefecture} layout="vertical" margin={{ left: 20 }}>
-                                            <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} width={90} />
-                                            <RTooltip />
-                                            <Bar dataKey="total" name="Élèves" fill={BLUE} radius={[0, 4, 4, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </Card></div>
-                            </div>
+                            </>
                         )}
                     </div>
                 )}

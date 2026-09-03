@@ -466,7 +466,7 @@ class StatisticsService
             ->selectRaw('students.prefecture AS name, students.region AS region, COUNT(DISTINCT students.id) AS total')
             ->groupBy('students.prefecture', 'students.region')
             ->orderByDesc('total')
-            ->limit(20)
+            ->limit(40) // les 40 préfectures du Togo : la vue hiérarchique (treemap) doit être complète.
             ->get()
             ->map(fn ($r) => ['name' => $r->name, 'region' => $r->region, 'total' => (int) $r->total]);
 
