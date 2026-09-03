@@ -75,7 +75,11 @@ class DemoSeeder extends Seeder
     /** Graine fixe : une démo reproductible d'une machine à l'autre. */
     private const SEED = 20260903;
 
-    /** Classes retenues et effectif visé (un niveau par cycle). */
+    /**
+     * Effectifs spécifiques pour quelques classes (variété du jeu de démo).
+     * Toutes les autres classes actives reçoivent l'effectif par défaut de
+     * {@see self::targetSize()} — au moins 20 élèves.
+     */
     private const CLASS_SIZES = [
         'CP1'   => 28,
         'CE2'   => 30,
@@ -84,6 +88,9 @@ class DemoSeeder extends Seeder
         '3ème'  => 30,
         'Tle D' => 25,
     ];
+
+    /** Effectif plancher pour toute classe non listée dans CLASS_SIZES. */
+    private const MIN_CLASS_SIZE = 20;
 
     /** Programme par cycle : code matière => coefficient. */
     private const CURRICULUM = [
@@ -213,13 +220,14 @@ class DemoSeeder extends Seeder
             return false;
         }
 
+        // Toutes les classes actives : chacune doit être peuplée pour la démo.
         $this->classes = Classroom::query()
             ->with('type')
-            ->whereIn('code', array_keys(self::CLASS_SIZES))
+            ->where('active', true)
             ->get();
 
         if ($this->classes->isEmpty()) {
-            $this->command?->error('DemoSeeder : les classes attendues sont absentes (ClassroomSeeder).');
+            $this->command?->error('DemoSeeder : aucune classe active (ClassroomSeeder).');
 
             return false;
         }
@@ -237,6 +245,16 @@ class DemoSeeder extends Seeder
             str_contains($type, 'collège')                                     => 'college',
             default                                                            => 'lycee',
         };
+    }
+
+    /**
+     * Effectif visé d'une classe : valeur dédiée si définie, sinon un plancher de
+     * 20 avec une légère variation déterministe (20 à 24) pour éviter des classes
+     * toutes identiques.
+     */
+    private function targetSize(Classroom $class): int
+    {
+        return self::CLASS_SIZES[$class->code] ?? self::MIN_CLASS_SIZE + (crc32((string) $class->code) % 5);
     }
 
     private function step(string $label, callable $work): void
@@ -492,7 +510,7 @@ class DemoSeeder extends Seeder
             ->all();
 
         foreach ($this->classes as $class) {
-            $target  = self::CLASS_SIZES[$class->code] ?? 25;
+            $target  = $this->targetSize($class);
             $current = Enrollment::query()
                 ->where('class_id', $class->id)
                 ->where('academic_year_id', $this->year->id)
