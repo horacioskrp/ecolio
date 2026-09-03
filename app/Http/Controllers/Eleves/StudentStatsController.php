@@ -66,8 +66,10 @@ class StudentStatsController extends Controller
             '15 à 18 ans'    => 0,
             'Plus de 18 ans' => 0,
         ];
+        $ages = [];
         foreach (Student::whereIn('id', $studentIds)->whereNotNull('birth_date')->pluck('birth_date') as $dob) {
-            $age = Carbon::parse($dob)->age;
+            $age    = Carbon::parse($dob)->age;
+            $ages[] = $age;
             $key = match (true) {
                 $age < 6  => 'Moins de 6 ans',
                 $age <= 10 => '6 à 10 ans',
@@ -77,7 +79,25 @@ class StudentStatsController extends Controller
             };
             $brackets[$key]++;
         }
-        $byAge = collect($brackets)->map(fn ($count, $label) => ['label' => $label, 'count' => $count])->values();
+        $byAge    = collect($brackets)->map(fn ($count, $label) => ['label' => $label, 'count' => $count])->values();
+        $ageMoyen = $ages !== [] ? round(array_sum($ages) / count($ages), 1) : null;
+
+        // Parité (indice IPS = filles / garçons).
+        $femalePct = $total > 0 ? round($byGender['female'] / $total * 100, 1) : 0.0;
+        $ips       = $byGender['male'] > 0 ? round($byGender['female'] / $byGender['male'], 2) : null;
+
+        // Sur-âge (retard scolaire) : âge de l'élève >= âge attendu de sa classe + 2.
+        $overAgeThreshold = 2;
+        $ageRows = Enrollment::query()
+            ->join('classes', 'classes.id', '=', 'enrollments.class_id')
+            ->join('students', 'students.id', '=', 'enrollments.student_id')
+            ->where('enrollments.academic_year_id', $selectedYearId)
+            ->whereIn('enrollments.academic_status', Enrollment::ACTIVE_ACADEMIC_STATUSES)
+            ->whereNotNull('students.birth_date')
+            ->whereNotNull('classes.expected_age')
+            ->get(['students.birth_date', 'classes.expected_age']);
+        $overEval  = $ageRows->count();
+        $overCount = $ageRows->filter(fn ($r) => (Carbon::parse($r->birth_date)->age - (int) $r->expected_age) >= $overAgeThreshold)->count();
 
         // Effectifs par classe (année sélectionnée, scolarité active)
         $byClass = $selectedYearId
@@ -103,6 +123,13 @@ class StudentStatsController extends Controller
             'byNationality' => $byNationality,
             'byAge'         => $byAge,
             'byClass'       => $byClass,
+            'parite'        => ['female_pct' => $femalePct, 'ips' => $ips],
+            'ageMoyen'      => $ageMoyen,
+            'overAge'       => [
+                'evaluated' => $overEval,
+                'count'     => $overCount,
+                'rate'      => $overEval > 0 ? round($overCount / $overEval * 100, 1) : 0.0,
+            ],
             'academicYears' => $academicYears->map(fn ($y) => ['id' => $y->id, 'year' => $y->year])->values(),
             'selectedYear'  => $selectedYear ? ['id' => $selectedYear->id, 'year' => $selectedYear->year] : null,
         ]);
