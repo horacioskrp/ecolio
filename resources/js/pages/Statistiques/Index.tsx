@@ -109,49 +109,52 @@ function Card({ title, icon, children }: { title: string; icon?: React.ReactNode
     );
 }
 
+/** Contraste : texte blanc sur fond foncé, encre sombre sur fond clair. */
+function isDarkHex(hex: string): boolean {
+    const c = hex.replace('#', '');
+    if (c.length < 6) return false;
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    return 0.299 * r + 0.587 * g + 0.114 * b < 150;
+}
+
 /**
- * Nœud du treemap géographique. La région (depth 1) est un cadre étiqueté ; la
- * préfecture (feuille) est remplie par une rampe séquentielle selon son effectif
- * (magnitude → teinte, jamais une couleur par région, indistinguable au-delà de
- * trois ou quatre catégories). L'identité passe par les libellés.
+ * Nœud du treemap géographique. Chaque région porte sa propre teinte (identité),
+ * la préfecture en reçoit une nuance selon son effectif (magnitude). Position,
+ * libellés et légende des régions restent des encodages secondaires qui
+ * sécurisent la lecture. Les couleurs finales sont précalculées en amont et
+ * passées par les tables `regionColor` / `prefColor`.
  */
 function TreemapNode(props: {
-    x?: number; y?: number; width?: number; height?: number; depth?: number;
-    name?: string; value?: number; sequential?: readonly string[]; surface?: string;
-    axis?: string; tick?: string; maxLeaf?: number;
+    x?: number; y?: number; width?: number; height?: number; depth?: number; name?: string; value?: number;
+    surface?: string; regionColor?: Record<string, string>; prefColor?: Record<string, string>;
 }) {
     const { x = 0, y = 0, width = 0, height = 0, depth = 0, name = '', value = 0 } = props;
-    const seq = props.sequential ?? ['#bfdbfe', '#60a5fa', '#2a78d6', '#1e3a8a'];
-    const surface = props.surface ?? '#fff';
+    const surface = props.surface ?? '#ffffff';
 
     // Racine : ne rien peindre, sinon un grand rectangle recouvrirait tout le treemap.
     if (depth === 0) {
         return <g />;
     }
 
+    // Région : liseré de sa couleur, pour regrouper visuellement ses préfectures.
     if (depth === 1) {
-        return (
-            <g>
-                <rect x={x} y={y} width={width} height={height} fill="none" stroke={surface} strokeWidth={3} />
-                {width > 64 && height > 18 && (
-                    <text x={x + 6} y={y + 15} fontSize={12} fontWeight={700} fill={props.axis ?? '#374151'}>{name}</text>
-                )}
-            </g>
-        );
+        const accent = props.regionColor?.[name] ?? '#94a3b8';
+        return <rect x={x} y={y} width={width} height={height} fill="none" stroke={accent} strokeWidth={2.5} rx={2} />;
     }
 
-    const ratio = props.maxLeaf && props.maxLeaf > 0 ? value / props.maxLeaf : 0;
-    const idx = Math.min(seq.length - 1, Math.max(0, Math.round(ratio * (seq.length - 1))));
-    const onDark = idx >= seq.length - 2;
+    const fill = props.prefColor?.[name] ?? '#94a3b8';
+    const onDark = isDarkHex(fill);
     const label = name.length > 15 ? `${name.slice(0, 14)}…` : name;
 
     return (
         <g>
-            <rect x={x} y={y} width={width} height={height} fill={seq[idx]} stroke={surface} strokeWidth={1.5} rx={2} />
+            <rect x={x} y={y} width={width} height={height} fill={fill} stroke={surface} strokeWidth={1.5} rx={2} />
             {width > 46 && height > 26 && (
                 <>
-                    <text x={x + 5} y={y + 15} fontSize={10.5} fontWeight={600} fill={onDark ? '#ffffff' : (props.axis ?? '#374151')}>{label}</text>
-                    <text x={x + 5} y={y + 28} fontSize={10} fill={onDark ? 'rgba(255,255,255,0.85)' : (props.tick ?? '#9ca3af')}>{value}</text>
+                    <text x={x + 5} y={y + 15} fontSize={10.5} fontWeight={600} fill={onDark ? '#ffffff' : '#1f2937'}>{label}</text>
+                    <text x={x + 5} y={y + 28} fontSize={10} fill={onDark ? 'rgba(255,255,255,0.85)' : 'rgba(31,41,55,0.7)'}>{value}</text>
                 </>
             )}
         </g>
@@ -246,7 +249,32 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
     const grandLomeNames = ['Golfe', 'Agoè-Nyivé'];
     const grandLomeTotal = geography.by_prefecture.filter((p) => grandLomeNames.includes(p.name)).reduce((s, p) => s + p.total, 0);
     const grandLomeShare = geography.localized > 0 ? Math.round((grandLomeTotal / geography.localized) * 1000) / 10 : 0;
-    const maxLeaf = geography.by_prefecture.reduce((m, p) => Math.max(m, p.total), 0);
+
+    // Une teinte par région (identité), déclinée en trois nuances selon l'effectif
+    // de la préfecture (magnitude). Le nom de région porte l'identité ; la position
+    // et la légende sécurisent la lecture, donc des couleurs distinctes sont sûres.
+    // Teintes soutenues (validées : contraste >= 3:1 sur fond clair et sombre, et
+    // séparation daltonienne dans la bande autorisée avec encodage secondaire).
+    const regionFamilies: Record<string, [string, string, string]> = {
+        Maritime: ['#60a5fa', '#2563eb', '#1e40af'], // bleu
+        Plateaux: ['#4ade80', '#16a34a', '#166534'], // vert
+        Centrale: ['#fbbf24', '#d97706', '#92400e'], // ambre
+        Kara: ['#a78bfa', '#7c3aed', '#5b21b6'],     // violet
+        Savanes: ['#f472b6', '#db2777', '#9d174d'],  // rose
+    };
+    const fallbackFamily: [string, string, string] = ['#cbd5e1', '#64748b', '#334155'];
+    const regionColor: Record<string, string> = {};
+    const prefColor: Record<string, string> = {};
+    geography.by_region.forEach((r) => {
+        const fam = regionFamilies[r.name] ?? fallbackFamily;
+        regionColor[r.name] = fam[1];
+        const prefs = geography.by_prefecture.filter((p) => p.region === r.name);
+        const regionMax = prefs.reduce((m, p) => Math.max(m, p.total), 0) || 1;
+        prefs.forEach((p) => {
+            const idx = Math.min(2, Math.max(0, Math.round((p.total / regionMax) * 2)));
+            prefColor[p.name] = fam[idx];
+        });
+    });
     const treemapData = geography.by_region
         .map((r) => ({
             name: r.name,
@@ -681,25 +709,29 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                 </div>
 
                                 <Card title="Origine des élèves — régions et préfectures" icon={<MapPin className="w-4 h-4" />}>
-                                    {/* Hiérarchie région → préfecture : l'aire porte la magnitude, la teinte
-                                        (rampe séquentielle) l'intensité, les libellés l'identité — jamais une
-                                        couleur par région, indistinguable au-delà de trois ou quatre. */}
-                                    <ResponsiveContainer width="100%" height={380}>
+                                    {/* Hiérarchie région → préfecture : l'aire porte la magnitude, une teinte
+                                        par région porte l'identité (déclinée en nuances selon l'effectif), et la
+                                        position + la légende + les libellés sécurisent la lecture. */}
+                                    <ResponsiveContainer width="100%" height={400}>
                                         <Treemap
                                             data={treemapData}
                                             dataKey="size"
                                             aspectRatio={4 / 3}
                                             stroke={theme.surface}
                                             isAnimationActive={false}
-                                            content={<TreemapNode sequential={theme.sequential} surface={theme.surface} axis={theme.axis} tick={theme.tick} maxLeaf={maxLeaf} />}
+                                            content={<TreemapNode surface={theme.surface} regionColor={regionColor} prefColor={prefColor} />}
                                         >
                                             <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v} élèves`, 'Effectif']} />
                                         </Treemap>
                                     </ResponsiveContainer>
-                                    <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
-                                        <span>Effectif&nbsp;:</span>
-                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: theme.sequential[0] }} /> faible</span>
-                                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: theme.sequential[theme.sequential.length - 1] }} /> élevé</span>
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-gray-500 dark:text-gray-400">
+                                        {geography.by_region.map((r) => (
+                                            <span key={r.name} className="flex items-center gap-1.5">
+                                                <span className="inline-block w-3 h-3 rounded-sm" style={{ background: regionColor[r.name] }} />
+                                                {r.name}
+                                            </span>
+                                        ))}
+                                        <span className="text-gray-400">· nuance = effectif de la préfecture</span>
                                     </div>
                                 </Card>
 
@@ -710,7 +742,8 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                             <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} allowDecimals={false} />
                                             <YAxis type="category" dataKey="name" width={104} tick={{ fontSize: 12, fill: theme.axis }} axisLine={false} tickLine={false} />
                                             <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v} élèves`, 'Effectif']} />
-                                            <Bar dataKey="total" fill={BLUE} radius={[0, 4, 4, 0]} maxBarSize={26}>
+                                            <Bar dataKey="total" radius={[0, 4, 4, 0]} maxBarSize={26}>
+                                                {geography.by_region.map((r) => <Cell key={r.name} fill={regionColor[r.name] ?? BLUE} />)}
                                                 <LabelList dataKey="total" position="right" style={{ fontSize: 11, fill: theme.tick }} />
                                             </Bar>
                                         </BarChart>
