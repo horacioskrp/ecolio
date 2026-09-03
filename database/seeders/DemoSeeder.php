@@ -1494,6 +1494,55 @@ class DemoSeeder extends Seeder
             'start_date'  => CarbonImmutable::parse($first->start_date)->addMonths(2),
         ]];
 
+        // Événements du mois courant : le calendrier s'ouvre sur le mois d'aujourd'hui.
+        // Sans eux il paraîtrait vide alors que l'année en compte partout ailleurs — et
+        // on ne verrait donc aucun marquage à l'ouverture.
+        $now = $this->today;
+        $events = array_merge($events, [
+            [
+                'title'       => 'Réunion de coordination pédagogique',
+                'description' => 'Point d\'étape du trimestre avec les enseignants.',
+                'type'        => 'meeting',
+                'start_date'  => $now->subDays(2),
+                'start_time'  => '16:00',
+                'end_time'    => '18:00',
+                'all_day'     => false,
+                'color'       => '#7c3aed',
+            ],
+            [
+                'title'       => 'Journée sportive inter-classes',
+                'description' => 'Compétitions sportives entre les classes.',
+                'type'        => 'event',
+                'start_date'  => $now->addDays(4),
+                'color'       => '#2a78d6',
+            ],
+            [
+                'title'       => 'Devoirs surveillés du mois',
+                'description' => 'Série de devoirs surveillés dans toutes les classes.',
+                'type'        => 'exam',
+                'start_date'  => $now->addDays(8),
+                'end_date'    => $now->addDays(11),
+                'color'       => '#eb6834',
+            ],
+            [
+                'title'       => 'Sortie pédagogique',
+                'description' => 'Visite éducative encadrée par les enseignants.',
+                'type'        => 'event',
+                'start_date'  => $now->addDays(14),
+                'color'       => '#2a78d6',
+            ],
+            [
+                'title'       => 'Réunion parents-professeurs',
+                'description' => 'Rencontre individuelle des familles et des enseignants.',
+                'type'        => 'meeting',
+                'start_date'  => $now->addDays(18),
+                'start_time'  => '15:00',
+                'end_time'    => '18:00',
+                'all_day'     => false,
+                'color'       => '#7c3aed',
+            ],
+        ]);
+
         // Jalons de fin de période : composition, conseil, bulletins, congés.
         foreach ($this->periods as $period) {
             $end = CarbonImmutable::parse($period->end_date);
