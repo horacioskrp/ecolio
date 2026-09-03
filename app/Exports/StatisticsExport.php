@@ -58,9 +58,9 @@ class StatisticsExport implements WithMultipleSheets
                 ['Élèves en sur-âge', $d['over_age']['count']],
             ]),
             new SheetFromArray('Effectifs par classe', ['Classe', 'Garçons', 'Filles', 'Total'],
-                $this->rows($d['by_class'], fn ($c) => [$c->name, $c->male, $c->female, $c->total])),
-            new SheetFromArray('Origine (villes)', ['Ville', 'Élèves'],
-                $this->rows($d['by_city'], fn ($c) => [$c->city, $c->total])),
+                $this->rows($d['by_class'], fn ($c) => [$c['name'], $c['male'], $c['female'], $c['total']])),
+            new SheetFromArray('Origine (villes)', ['Ville', 'Garçons', 'Filles', 'Total'],
+                $this->rows($d['by_city'], fn ($c) => [$c['city'], $c['male'], $c['female'], $c['total']])),
         ];
     }
 

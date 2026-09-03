@@ -4,6 +4,37 @@ Toutes les évolutions notables de **Dalibi** sont consignées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 respecte [SemVer](https://semver.org/lang/fr/).
 
+## [1.2.0] — 2026-09-03
+
+Refonte du module **Statistiques** : chaque onglet gagne des graphiques plus lisibles,
+accessibles (palette validée en vision déficiente, mode sombre), interactifs et, là où
+c'est pertinent, ventilés par sexe et filtrables.
+
+### Ajouté
+- **Comparaisons** : cartes de variation vs année précédente, séparation en deux lectures
+  claires — *Performance* (réussite, recouvrement) et *Déperdition* (redoublement,
+  abandon) — l'année en cours n'étant pas tracée pour les taux de fin d'année encore
+  indécis. Le jeu de démonstration sème deux années passées pour donner de vraies tendances.
+- **Géographie** : treemap hiérarchique région → préfecture, une teinte par région
+  (nuancée selon l'effectif) et une légende ; KPI de concentration (couverture, part du
+  Grand Lomé, régions, préfectures).
+- **Réussite & examens** : examens officiels (CEPD, BEPC, BAC) avec résultats
+  admis / échoué / absent et taux d'admission ; **répartition des mentions** enfin
+  alimentée (quatre paliers).
+- **Effectifs & parité** : **pyramide des âges** divergente garçons / filles, **origine
+  géographique** (top villes) ventilée par sexe, et **filtre par cycle** (Maternelle /
+  Primaire / Collège / Lycée) avec tri sur le graphe des classes.
+- **Statistiques élèves** (module Élèves) refondue : vrais graphiques thémés, mode sombre,
+  donut de parité, histogramme d'âge, effectifs par classe filtrables et empilés par sexe,
+  KPI d'âge moyen et de sur-âge.
+- Âge attendu par classe renseigné, ce qui active le calcul du **sur-âge** (retard scolaire).
+
+### Corrigé
+- **Répartition des mentions vide** : les libellés (« Très bien », « Assez bien »…) sont
+  désormais normalisés avant d'être agrégés sur les quatre paliers standard.
+- **Lisibilité de la géographie** : couleurs par région (les faibles effectifs, en teinte
+  unique quasi blanche, étaient invisibles) et libellés du treemap en graisse normale.
+
 ## [1.1.0] — 2026-09-03
 
 ### Ajouté
