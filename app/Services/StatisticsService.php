@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Agrégations statistiques (socle V1) : effectifs & parité, finances & recouvrement,
@@ -237,11 +238,23 @@ class StatisticsService
             COUNT(CASE WHEN average >= 10 THEN 1 END) AS pass_count
         ')->first();
 
-        $mentions = (clone $rc)
+        // Les mentions sont stockées telles qu'affichées ("Très bien", "Assez bien"…),
+        // selon le barème de l'école. On les replie vers les quatre paliers standard
+        // en ignorant accents, casse et ponctuation — sinon la répartition reste vide
+        // dès que le libellé n'est pas exactement la clé normalisée.
+        $mentionRows = (clone $rc)
             ->whereNotNull('mention')->where('mention', '!=', '')
             ->selectRaw('mention, COUNT(*) AS total')
             ->groupBy('mention')
-            ->pluck('total', 'mention');
+            ->get();
+
+        $mentions = ['passable' => 0, 'assez_bien' => 0, 'bien' => 0, 'tres_bien' => 0];
+        foreach ($mentionRows as $row) {
+            $key = Str::of($row->mention)->ascii()->lower()->replaceMatches('/[^a-z0-9]+/', '_')->trim('_')->value();
+            if (array_key_exists($key, $mentions)) {
+                $mentions[$key] += (int) $row->total;
+            }
+        }
 
         $rcTotal = (int) ($rcStats->total ?? 0);
 
