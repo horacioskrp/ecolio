@@ -447,7 +447,17 @@ class DemoSeeder extends Seeder
      */
     private function seedGradingConfig(): void
     {
-        GradingConfig::firstOrCreate(
+        // Les quatre mentions standard (Passable → Très bien) plutôt que le schéma
+        // « honneurs » par défaut : c'est ce que la répartition des mentions des
+        // statistiques agrège, et ce que porte un bulletin togolais courant.
+        $mentions = [
+            ['label' => 'Très bien',  'min' => 16],
+            ['label' => 'Bien',       'min' => 14],
+            ['label' => 'Assez bien', 'min' => 12],
+            ['label' => 'Passable',   'min' => 10],
+        ];
+
+        GradingConfig::updateOrCreate(
             ['school_id' => $this->school->id, 'classroom_type_id' => null],
             [
                 'name'              => 'Barème par défaut',
@@ -457,7 +467,7 @@ class DemoSeeder extends Seeder
                 'class_weight'      => 1,
                 'comp_weight'       => 1,
                 'round_precision'   => 2,
-                'mentions'          => GradingConfig::defaultMentions(),
+                'mentions'          => $mentions,
             ],
         );
 
@@ -1113,34 +1123,79 @@ class DemoSeeder extends Seeder
     }
 
     /** Inscriptions aux examens officiels enregistrés, pour la classe concernée. */
+    /**
+     * Examens officiels de l'année en cours (CEPD, BEPC, BAC), avec leurs résultats :
+     * les élèves des classes d'examen (CM2, 3ème, Terminale) sont inscrits puis
+     * admis / échoués / absents selon un taux d'admission plausible par examen.
+     */
     private function seedExamRegistrations(): void
     {
-        $exams = OfficialExam::query()->where('academic_year_id', $this->year->id)->get();
+        $blueprint = [
+            ['type' => 'cepd', 'name' => 'CEPD', 'class' => 'CM2',   'center' => 'EPP Tokoin',         'admis' => 88, 'serie' => null],
+            ['type' => 'bepc', 'name' => 'BEPC', 'class' => '3ème',  'center' => 'CEG Tokoin',         'admis' => 78, 'serie' => null],
+            ['type' => 'bac',  'name' => 'BAC II', 'class' => 'Tle D', 'center' => 'Lycée de Tokoin',  'admis' => 72, 'serie' => 'D'],
+        ];
+        $examYear = (int) substr($this->year->year, 5, 4);
 
-        foreach ($exams as $exam) {
-            $students = Enrollment::query()
+        // Idempotent : si des résultats existent déjà pour l'année, on ne refait rien.
+        // Sinon, on repart propre (efface d'éventuelles inscriptions « à blanc »).
+        $existingExamIds = OfficialExam::query()->where('academic_year_id', $this->year->id)->pluck('id');
+        if (OfficialExamRegistration::query()->whereIn('official_exam_id', $existingExamIds)->whereIn('status', ['admis', 'echoue', 'absent'])->exists()) {
+            return;
+        }
+        OfficialExamRegistration::query()->whereIn('official_exam_id', $existingExamIds)->delete();
+
+        foreach ($blueprint as $b) {
+            $class = $this->classes->firstWhere('code', $b['class']);
+
+            if (! $class) {
+                continue;
+            }
+
+            $exam = OfficialExam::updateOrCreate(
+                ['type' => $b['type'], 'year' => $examYear, 'academic_year_id' => $this->year->id],
+                [
+                    'school_id' => $this->school->id,
+                    'name'      => $b['name'],
+                    'session'   => 'normale',
+                    'exam_date' => $examYear . '-06-15',
+                    'center'    => $b['center'],
+                    'status'    => 'termine',
+                    'class_id'  => $class->id,
+                ],
+            );
+
+            $studentIds = Enrollment::query()
                 ->where('academic_year_id', $this->year->id)
-                ->when($exam->class_id, fn ($q) => $q->where('class_id', $exam->class_id))
+                ->where('class_id', $class->id)
                 ->active()
                 ->pluck('student_id');
 
-            foreach ($students as $index => $studentId) {
-                $exists = OfficialExamRegistration::query()
-                    ->where('official_exam_id', $exam->id)
-                    ->where('student_id', $studentId)
-                    ->exists();
+            $rows = [];
+            foreach ($studentIds as $index => $studentId) {
+                $draw = $this->faker->numberBetween(1, 100);
+                [$status, $average, $mention] = match (true) {
+                    $draw <= 3              => ['absent', null, null],
+                    $draw <= $b['admis'] + 3 => ['admis', $avg = round($this->faker->randomFloat(2, 10, 17), 2), $this->historyMention($avg)],
+                    default                 => ['echoue', round($this->faker->randomFloat(2, 6, 9.75), 2), null],
+                };
 
-                if ($exists) {
-                    continue;
-                }
-
-                OfficialExamRegistration::create([
+                $rows[] = [
+                    'id'                  => (string) Str::uuid7(),
                     'official_exam_id'    => $exam->id,
                     'student_id'          => $studentId,
-                    'registration_number' => Str::upper($exam->type) . '-' . $exam->year . '-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT),
-                    'serie'               => null,
-                    'status'              => 'inscrit',
-                ]);
+                    'registration_number' => Str::upper($b['type']) . '-' . $examYear . '-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT),
+                    'serie'               => $b['serie'],
+                    'status'              => $status,
+                    'average'             => $average,
+                    'mention'             => $mention,
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ];
+            }
+
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('official_exam_registrations')->insert($chunk);
             }
         }
     }
