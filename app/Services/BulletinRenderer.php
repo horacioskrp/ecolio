@@ -205,7 +205,11 @@ class BulletinRenderer
             return $this->num($line['by_type'][substr($source, 5)] ?? null);
         }
 
-        return $this->num($line[$source] ?? null);
+        // La source « composition » (NOTE_SOURCES / colonnes) correspond à la clé
+        // « compo » du snapshot : sans cet alias la colonne Compo reste toujours vide.
+        $key = $source === 'composition' ? 'compo' : $source;
+
+        return $this->num($line[$key] ?? null);
     }
 
     private function infoBlock(array $p): string
@@ -340,7 +344,10 @@ class BulletinRenderer
 
     private function css(): string
     {
-        return <<<CSS
+        // L'en-tête ministériel est rendu par DocumentRenderer mais ses styles
+        // (dont le plafond de taille du logo) ne sont pas dans le baseCss du bulletin :
+        // sans eux le logo s'affiche à sa taille naturelle et écrase l'en-tête.
+        return $this->documents->headerCss() . <<<CSS
         * { box-sizing: border-box; }
         body { font-family: 'DejaVu Sans', sans-serif; color: #1a1a1a; font-size: 11px; margin: 0; }
         .bul-title { text-align: center; font-weight: bold; font-size: 14px; text-transform: uppercase; margin: 6px 0 10px; }

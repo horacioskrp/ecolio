@@ -4,6 +4,36 @@ Toutes les évolutions notables de **Dalibi** sont consignées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 respecte [SemVer](https://semver.org/lang/fr/).
 
+## [1.1.0] — 2026-09-03
+
+### Ajouté
+- **Jeu de démonstration complet** (`DemoSeeder`) : une année scolaire vivante sur toutes
+  les classes actives (au moins 20 élèves par classe), avec dossiers d'élèves complets,
+  programme et affectations des enseignants, évaluations notées et moyennes par matière,
+  bulletins figés, facturation et paiements, présences, emploi du temps, calendrier,
+  cycles de paie et dossiers courants (justificatifs, réclamations, primes, documents).
+  Noms, prénoms et villes réels du Togo (divisions administratives officielles),
+  recrutement pondéré autour de Lomé. Seeder idempotent, déterministe, et interdit en
+  production. Lancement : `php artisan db:seed --class=DemoSeeder`.
+
+### Corrigé
+- **Bulletin — colonne Composition toujours vide** : la colonne de source « composition »
+  était résolue sur une clé absente du bulletin figé (la valeur y est stockée sous
+  « compo »). La colonne restait vide **même quand la note existait**, quelle que soit la
+  période ou le barème. Correctif d'affichage : aucun bulletin à régénérer.
+- **Bulletin — logo de l'en-tête surdimensionné** : les styles de l'en-tête ministériel
+  (dont le plafond de taille du logo) n'étaient pas embarqués dans le CSS du bulletin ; le
+  logo s'affichait à sa taille naturelle et écrasait l'en-tête.
+- **Types d'évaluation — catégorie de la « Composition »** : lorsqu'elle avait dérivé vers
+  « contrôle continu », la composition était diluée dans la note de classe et la
+  pondération Classe/Compo du barème était ignorée. Rejouer `ReferenceDataSeeder` corrige
+  la donnée, puis régénérer les bulletins concernés.
+
+### Modifié
+- **Bulletin — la colonne « Classe »** (contrôle continu) s'intitule désormais « Devoir »
+  par défaut. Seul l'affichage change : la colonne agrège toujours interro + devoir et
+  alimente la moyenne. Un libellé déjà personnalisé par une école n'est pas écrasé.
+
 ## [1.0.1] — 2026-09-02
 
 ### Corrigé

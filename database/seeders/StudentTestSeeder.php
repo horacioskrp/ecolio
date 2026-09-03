@@ -148,7 +148,7 @@ class StudentTestSeeder extends Seeder
                     'enrollment_code'  => 'INS-' . $academicYear->year . '-' . str_pad((string) ($i + 1), 4, '0', STR_PAD_LEFT),
                     'enrolled_by'      => $enrolledBy,
                     'enrollment_date'  => now()->toDateString(),
-                    'status'           => $faker->boolean(75) ? 'paid' : 'unpaid',
+                    'status'           => $faker->boolean(75) ? Enrollment::STATUS_ACTIVE : Enrollment::STATUS_PENDING,
                 ]);
             }
         }
