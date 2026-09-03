@@ -2,12 +2,19 @@
 
 namespace Database\Seeders;
 
+use App\Models\AbsencePermission;
 use App\Models\AcademicPeriod;
 use App\Models\AcademicYear;
+use App\Models\ArchivedDocument;
 use App\Models\Attendance;
 use App\Models\BulletinTemplate;
+use App\Models\CalendarEvent;
 use App\Models\Classroom;
 use App\Models\ClassSubject;
+use App\Models\DocumentIssuance;
+use App\Models\DocumentTag;
+use App\Models\DocumentTemplate;
+use App\Models\EmployeeAllowance;
 use App\Models\EmployeeProfile;
 use App\Models\Enrollment;
 use App\Models\Evaluation;
@@ -17,6 +24,9 @@ use App\Models\FeeCategorie;
 use App\Models\FeeStructure;
 use App\Models\GradingConfig;
 use App\Models\Invoice;
+use App\Models\NoteReclamation;
+use App\Models\OfficialExam;
+use App\Models\OfficialExamRegistration;
 use App\Models\PayRun;
 use App\Models\PayrollSetting;
 use App\Models\SalaryComponent;
@@ -24,6 +34,7 @@ use App\Models\SalaryGrade;
 use App\Models\Scholarship;
 use App\Models\School;
 use App\Models\Student;
+use App\Models\StudentDocument;
 use App\Models\StudentInformation;
 use App\Models\StudentMedicalInfo;
 use App\Models\StudentParent;
@@ -35,6 +46,7 @@ use App\Models\User;
 use App\Services\InvoiceService;
 use App\Services\PayrollService;
 use App\Services\ReportCardBuilder;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Faker\Factory as Faker;
 use Faker\Generator;
@@ -42,6 +54,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -136,11 +149,14 @@ class DemoSeeder extends Seeder
         $this->step('Programme et affectations', fn () => $this->seedCurriculum());
         $this->step('Évaluations', fn () => $this->seedEvaluations());
         $this->step('Notes', fn () => $this->seedMarks());
+        $this->step('Moyennes par matière', fn () => $this->seedSubjectGrades());
         $this->step('Bourses', fn () => $this->seedScholarships());
         $this->step('Frais, factures et paiements', fn () => $this->seedFinance());
         $this->step('Présences', fn () => $this->seedAttendance());
         $this->step('Emploi du temps', fn () => $this->seedTimetable());
+        $this->step('Calendrier scolaire', fn () => $this->seedCalendar());
         $this->step('Personnel et paie', fn () => $this->seedPayroll());
+        $this->step('Dossiers courants', fn () => $this->seedCasework());
         $this->step('Bulletins', fn () => $this->seedReportCards());
 
         $this->command?->newLine();
@@ -253,14 +269,17 @@ class DemoSeeder extends Seeder
         $existing = User::query()->role('enseignant')->pluck('id')->all();
 
         for ($i = count($existing); $i < 14; $i++) {
-            $firstname = $this->faker->firstName();
+            // Le sexe est tiré d'abord : le prénom en découle, sinon la liste des
+            // enseignants affiche des « Pauline » déclarées masculines.
+            $gender    = $this->faker->randomElement(['male', 'female']);
+            $firstname = $this->faker->firstName($gender);
             $lastname  = Str::upper($this->faker->lastName());
 
             $user = User::create([
                 'firstname'         => $firstname,
                 'lastname'          => $lastname,
                 'email'             => 'prof' . ($i + 1) . '@dalibi.tg',
-                'gender'            => $this->faker->randomElement(['male', 'female']),
+                'gender'            => $gender,
                 'telephone'         => '+228 9' . $this->faker->numerify('# ## ## ##'),
                 'address'           => $this->faker->streetAddress() . ', Lomé',
                 'password'          => Hash::make('password123'),
@@ -592,6 +611,382 @@ class DemoSeeder extends Seeder
         return sqrt(-2 * log($u1)) * cos(2 * M_PI * $u2);
     }
 
+    /**
+     * Moyenne consolidée par matière et par période, dérivée des notes saisies.
+     *
+     * L'écran « Notes » lit la table `grades`, distincte des notes d'épreuves :
+     * sans cette consolidation il resterait vide alors que les bulletins, eux,
+     * se calculent depuis les évaluations. La moyenne est pondérée par le
+     * coefficient de l'épreuve, comme le fait la saisie manuelle.
+     */
+    private function seedSubjectGrades(): void
+    {
+        $computed = DB::table('marks as m')
+            ->join('evaluations as e', 'e.id', '=', 'm.evaluation_id')
+            ->join('evaluation_templates as et', 'et.id', '=', 'e.evaluation_template_id')
+            ->whereNotNull('m.score')
+            ->where('m.absent', false)
+            ->groupBy('m.student_id', 'e.class_subject_id', 'et.academic_period_id')
+            ->selectRaw('m.student_id, e.class_subject_id, et.academic_period_id,
+                round(sum(m.score * et.coefficient) / nullif(sum(et.coefficient), 0), 2) as score')
+            ->get();
+
+        $known = DB::table('grades')
+            ->get(['student_id', 'class_subject_id', 'academic_period_id'])
+            ->map(fn ($g) => $g->student_id . '|' . $g->class_subject_id . '|' . $g->academic_period_id)
+            ->flip();
+
+        $rows = [];
+        foreach ($computed as $row) {
+            $key = $row->student_id . '|' . $row->class_subject_id . '|' . $row->academic_period_id;
+
+            if ($known->has($key) || $row->score === null) {
+                continue;
+            }
+
+            $rows[] = [
+                'id'                 => (string) Str::uuid7(),
+                'student_id'         => $row->student_id,
+                'class_subject_id'   => $row->class_subject_id,
+                'academic_period_id' => $row->academic_period_id,
+                'score'              => $row->score,
+                'created_at'         => now(),
+                'updated_at'         => now(),
+            ];
+        }
+
+        foreach (array_chunk($rows, 500) as $batch) {
+            DB::table('grades')->insert($batch);
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Dossiers courants                                                   */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Les demandes et pièces qui font la vie quotidienne d'un établissement :
+     * justificatifs d'absence, réclamations de notes, inscriptions aux examens
+     * officiels, primes du personnel et documents délivrés. Chacun de ces écrans
+     * resterait vide sans quoi la démonstration s'arrêterait aux gros modules.
+     */
+    private function seedCasework(): void
+    {
+        $this->seedAbsencePermissions();
+        $this->seedNoteReclamations();
+        $this->seedExamRegistrations();
+        $this->seedAllowances();
+        $this->seedDocumentIssuances();
+        $this->seedFiledDocuments();
+    }
+
+    /**
+     * Archives et pièces du dossier élève.
+     *
+     * Ces deux modules servent de vrais fichiers en téléchargement : une ligne
+     * sans fichier sur le disque produirait un 404 dès le premier clic. Chaque
+     * entrée est donc accompagnée d'un PDF réellement écrit sur le disque
+     * « secure », hors du dossier public comme en exploitation.
+     */
+    private function seedFiledDocuments(): void
+    {
+        $archivist = User::query()->role('administrateur')->value('id') ?? User::query()->value('id');
+        $tags      = DocumentTag::query()->get();
+
+        $dossiers = [
+            ['category' => 'juridique',   'title' => 'Arrêté d\'ouverture de l\'établissement',   'tag' => 'Juridique'],
+            ['category' => 'juridique',   'title' => 'Statuts de l\'établissement',               'tag' => 'Juridique'],
+            ['category' => 'rh',          'title' => 'Convention collective du personnel',        'tag' => 'Ressources humaines'],
+            ['category' => 'rh',          'title' => 'Règlement intérieur du personnel',          'tag' => 'Contrat'],
+            ['category' => 'comptable',   'title' => 'Rapport financier ' . $this->year->year,    'tag' => 'Comptable'],
+            ['category' => 'comptable',   'title' => 'Budget prévisionnel ' . $this->year->year,  'tag' => 'Comptable'],
+            ['category' => 'pedagogique', 'title' => 'Programmes officiels — cycle primaire',     'tag' => 'Pédagogique'],
+            ['category' => 'pedagogique', 'title' => 'Projet d\'établissement',                   'tag' => 'Pédagogique'],
+            ['category' => 'courrier',    'title' => 'Correspondance — Inspection de Lomé Golfe', 'tag' => 'Courrier'],
+            ['category' => 'administratif', 'title' => 'Rapport d\'inspection pédagogique',       'tag' => 'Inspection'],
+        ];
+
+        foreach ($dossiers as $index => $dossier) {
+            if (ArchivedDocument::query()->where('title', $dossier['title'])->exists()) {
+                continue;
+            }
+
+            $archivedAt = $this->today->subDays($this->faker->numberBetween(10, 300));
+            $path       = 'archives/demo-' . Str::slug($dossier['title']) . '.pdf';
+            $size       = $this->writePdf($path, $dossier['title'], $this->school->name);
+
+            $document = ArchivedDocument::create([
+                'reference'       => 'ARC-' . $archivedAt->format('Y') . '-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT),
+                'title'           => $dossier['title'],
+                'description'     => 'Document de référence classé aux archives de l\'établissement.',
+                'category'        => $dossier['category'],
+                'path'            => $path,
+                'disk'            => 'secure',
+                'original_name'   => Str::slug($dossier['title']) . '.pdf',
+                'mime'            => 'application/pdf',
+                'size'            => $size,
+                'retention_until' => $archivedAt->addYears(10)->toDateString(),
+                'archived_by'     => $archivist,
+                'archived_at'     => $archivedAt,
+            ]);
+
+            if ($tag = $tags->firstWhere('name', $dossier['tag'])) {
+                $document->tags()->sync([$tag->id]);
+            }
+        }
+
+        if (StudentDocument::query()->exists()) {
+            return;
+        }
+
+        $pieces  = ['Acte de naissance', 'Certificat de scolarité antérieure', 'Photo d\'identité', 'Carnet de vaccination'];
+        $students = Student::query()
+            ->whereIn('id', Enrollment::query()->where('academic_year_id', $this->year->id)->active()->select('student_id'))
+            ->inRandomOrder()
+            ->limit(15)
+            ->get();
+
+        foreach ($students as $student) {
+            foreach ($this->faker->randomElements($pieces, $this->faker->numberBetween(1, 3)) as $piece) {
+                $path = $student->storageFolder() . '/documents/' . Str::slug($piece) . '.pdf';
+                $size = $this->writePdf($path, $piece, $student->lastname . ' ' . $student->firstname);
+
+                StudentDocument::create([
+                    'student_id'    => $student->id,
+                    'name'          => $piece,
+                    'path'          => $path,
+                    'original_name' => Str::slug($piece) . '.pdf',
+                    'mime'          => 'application/pdf',
+                    'size'          => $size,
+                    'uploaded_by'   => $archivist,
+                ]);
+            }
+        }
+    }
+
+    /** Écrit un PDF de démonstration sur le disque « secure » et retourne sa taille. */
+    private function writePdf(string $path, string $title, string $subtitle): int
+    {
+        // Police interne (Helvetica) plutôt que DejaVu Sans : cette dernière est
+        // embarquée dans chaque fichier et ferait passer une page de 6 Ko à 850 Ko,
+        // soit ~38 Mo de pièces de démonstration à sauvegarder pour rien.
+        $html = '<html><head><meta charset="utf-8"></head><body style="font-family: helvetica, sans-serif; padding: 60px">'
+            . '<p style="color:#6b7280; font-size:11px; letter-spacing:2px">DOCUMENT DE DÉMONSTRATION</p>'
+            . '<h1 style="font-size:22px; margin:8px 0">' . e($title) . '</h1>'
+            . '<p style="color:#374151">' . e($subtitle) . '</p>'
+            . '<hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0">'
+            . '<p style="color:#6b7280; font-size:12px">Contenu fictif généré par DemoSeeder. '
+            . 'Ce fichier existe pour que le téléchargement fonctionne pendant la démonstration.</p>'
+            . '</body></html>';
+
+        $content = Pdf::loadHTML($html)->output();
+        Storage::disk('secure')->put($path, $content);
+
+        return strlen($content);
+    }
+
+    /** Justificatifs d'absence, répartis sur les trois états du circuit de validation. */
+    private function seedAbsencePermissions(): void
+    {
+        if (AbsencePermission::query()->exists()) {
+            return;
+        }
+
+        $reviewer = User::query()->role('directeur')->value('id') ?? User::query()->value('id');
+        $parent   = User::query()->role('secrétariat')->value('id') ?? $reviewer;
+
+        // On part des élèves réellement absents : un justificatif sans absence
+        // correspondante serait incohérent au moindre recoupement.
+        $absences = DB::table('attendance_records as ar')
+            ->join('attendances as a', 'a.id', '=', 'ar.attendance_id')
+            ->whereIn('ar.status', ['absent', 'excused'])
+            ->inRandomOrder()
+            ->limit(24)
+            ->get(['ar.student_id', 'a.date']);
+
+        foreach ($absences as $index => $absence) {
+            $start  = CarbonImmutable::parse($absence->date);
+            $status = match ($index % 5) {
+                0, 1, 2 => 'approved',
+                3       => 'pending',
+                default => 'rejected',
+            };
+
+            $reason = $this->faker->randomElement(['medical', 'medical', 'familial', 'autre']);
+
+            AbsencePermission::create([
+                'student_id'     => $absence->student_id,
+                'requested_by'   => $parent,
+                'reviewed_by'    => $status === 'pending' ? null : $reviewer,
+                'start_date'     => $start->toDateString(),
+                'end_date'       => $start->addDays($this->faker->numberBetween(0, 3))->toDateString(),
+                'reason'         => $reason,
+                'description'    => match ($reason) {
+                    'medical'  => 'Consultation médicale, certificat fourni.',
+                    'familial' => 'Événement familial hors de Lomé.',
+                    default    => 'Motif communiqué par la famille.',
+                },
+                'status'         => $status,
+                'review_comment' => $status === 'rejected' ? 'Justificatif non transmis dans les délais.' : null,
+                'reviewed_at'    => $status === 'pending' ? null : $start->addDays(2),
+            ]);
+        }
+    }
+
+    /** Réclamations de notes : quelques contestations, dont certaines déjà arbitrées. */
+    private function seedNoteReclamations(): void
+    {
+        if (NoteReclamation::query()->exists()) {
+            return;
+        }
+
+        $reviewer = User::query()->role('directeur')->value('id') ?? User::query()->value('id');
+
+        $marks = DB::table('marks')
+            ->whereNotNull('score')
+            ->where('score', '<', 10)
+            ->inRandomOrder()
+            ->limit(12)
+            ->get(['evaluation_id', 'student_id', 'score']);
+
+        foreach ($marks as $index => $mark) {
+            $status = match ($index % 4) {
+                0, 1    => 'pending',
+                2       => 'approved',
+                default => 'rejected',
+            };
+
+            $requested = min(20, (float) $mark->score + $this->faker->randomFloat(1, 1, 4));
+
+            NoteReclamation::create([
+                'evaluation_id'   => $mark->evaluation_id,
+                'student_id'      => $mark->student_id,
+                'requested_by'    => $reviewer,
+                'reason'          => $this->faker->randomElement([
+                    'Une question corrigée comme fausse alors que la réponse est juste.',
+                    'Total des points erroné sur la copie.',
+                    'Une page de la copie n\'a pas été corrigée.',
+                ]),
+                'original_score'  => $mark->score,
+                'requested_score' => $requested,
+                'status'          => $status,
+                'reviewed_by'     => $status === 'pending' ? null : $reviewer,
+                'reviewed_at'     => $status === 'pending' ? null : now()->subDays($this->faker->numberBetween(1, 20)),
+                'corrected_score' => $status === 'approved' ? $requested : null,
+                'correction_note' => match ($status) {
+                    'approved' => 'Erreur de report confirmée, note rectifiée.',
+                    'rejected' => 'Correction vérifiée, barème correctement appliqué.',
+                    default    => null,
+                },
+            ]);
+        }
+    }
+
+    /** Inscriptions aux examens officiels enregistrés, pour la classe concernée. */
+    private function seedExamRegistrations(): void
+    {
+        $exams = OfficialExam::query()->where('academic_year_id', $this->year->id)->get();
+
+        foreach ($exams as $exam) {
+            $students = Enrollment::query()
+                ->where('academic_year_id', $this->year->id)
+                ->when($exam->class_id, fn ($q) => $q->where('class_id', $exam->class_id))
+                ->active()
+                ->pluck('student_id');
+
+            foreach ($students as $index => $studentId) {
+                $exists = OfficialExamRegistration::query()
+                    ->where('official_exam_id', $exam->id)
+                    ->where('student_id', $studentId)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                OfficialExamRegistration::create([
+                    'official_exam_id'    => $exam->id,
+                    'student_id'          => $studentId,
+                    'registration_number' => Str::upper($exam->type) . '-' . $exam->year . '-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT),
+                    'serie'               => null,
+                    'status'              => 'inscrit',
+                ]);
+            }
+        }
+    }
+
+    /** Primes et retenues individuelles du personnel. */
+    private function seedAllowances(): void
+    {
+        if (EmployeeAllowance::query()->exists()) {
+            return;
+        }
+
+        $author    = User::query()->role('administrateur')->value('id') ?? User::query()->value('id');
+        $employees = EmployeeProfile::query()->inRandomOrder()->limit(8)->get();
+
+        $catalogue = [
+            ['type' => 'earning',   'label' => 'Indemnité de logement',   'mode' => EmployeeAllowance::MODE_FIXED,        'amount' => 25000],
+            ['type' => 'earning',   'label' => 'Prime de responsabilité', 'mode' => EmployeeAllowance::MODE_PERCENT_BASE, 'amount' => 10],
+            ['type' => 'earning',   'label' => 'Heures supplémentaires',  'mode' => EmployeeAllowance::MODE_FIXED,        'amount' => 18000],
+            ['type' => 'deduction', 'label' => 'Avance sur salaire',      'mode' => EmployeeAllowance::MODE_FIXED,        'amount' => 30000],
+        ];
+
+        foreach ($employees as $index => $employee) {
+            $line = $catalogue[$index % count($catalogue)];
+
+            EmployeeAllowance::create([
+                'employee_profile_id' => $employee->id,
+                'type'                => $line['type'],
+                'label'               => $line['label'],
+                'mode'                => $line['mode'],
+                'amount'              => $line['amount'],
+                'reason'              => $line['type'] === 'deduction' ? 'Remboursement échelonné sur trois mois.' : null,
+                'starts_on'           => $this->today->startOfMonth()->subMonths(3)->toDateString(),
+                'active'              => true,
+                'created_by'          => $author,
+            ]);
+        }
+    }
+
+    /** Documents délivrés aux familles (certificats, attestations). */
+    private function seedDocumentIssuances(): void
+    {
+        if (DocumentIssuance::query()->exists()) {
+            return;
+        }
+
+        $templates = DocumentTemplate::query()->get();
+        $issuedBy  = User::query()->role('secrétariat')->value('id') ?? User::query()->value('id');
+
+        if ($templates->isEmpty()) {
+            return;
+        }
+
+        $students = Student::query()
+            ->whereIn('id', Enrollment::query()->where('academic_year_id', $this->year->id)->active()->select('student_id'))
+            ->inRandomOrder()
+            ->limit(20)
+            ->get();
+
+        foreach ($students as $index => $student) {
+            $template = $templates[$index % $templates->count()];
+            $issuedAt = $this->today->subDays($this->faker->numberBetween(1, 120));
+
+            DocumentIssuance::create([
+                'template_id'      => $template->id,
+                'student_id'       => $student->id,
+                'reference_number' => 'DOC-' . $issuedAt->format('Y') . '-' . str_pad((string) ($index + 1), 4, '0', STR_PAD_LEFT),
+                'issued_by'        => $issuedBy,
+                'payload'          => [
+                    'eleve'     => $student->lastname . ' ' . $student->firstname,
+                    'matricule' => $student->matricule,
+                ],
+                'issued_at'        => $issuedAt,
+            ]);
+        }
+    }
+
     /* ------------------------------------------------------------------ */
     /* Bourses et facturation                                              */
     /* ------------------------------------------------------------------ */
@@ -840,6 +1235,163 @@ class DemoSeeder extends Seeder
                 }
             }
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Calendrier scolaire                                                 */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Calendrier de l'année : jalons pédagogiques calés sur les périodes réelles
+     * (compositions, conseils de classe, remise des bulletins, congés), fêtes
+     * légales togolaises et sessions d'examens officiels déjà enregistrées.
+     *
+     * Les dates sont dérivées des périodes plutôt qu'écrites en dur : si l'année
+     * de démonstration change, le calendrier suit au lieu de pointer à côté.
+     */
+    private function seedCalendar(): void
+    {
+        $author = User::query()->role('administrateur')->value('id') ?? User::query()->value('id');
+        $first  = $this->periods->first();
+        $last   = $this->periods->last();
+
+        $events = [[
+            'title'       => 'Rentrée scolaire ' . $this->year->year,
+            'description' => 'Accueil des élèves et reprise des cours.',
+            'type'        => 'event',
+            'start_date'  => $first->start_date,
+            'color'       => '#2a78d6',
+        ], [
+            'title'       => 'Réunion de rentrée des parents',
+            'description' => 'Présentation de l\'équipe pédagogique et du règlement intérieur.',
+            'type'        => 'meeting',
+            'start_date'  => CarbonImmutable::parse($first->start_date)->addWeek(),
+            'start_time'  => '15:00',
+            'end_time'    => '17:00',
+            'all_day'     => false,
+        ], [
+            'title'       => 'Journée portes ouvertes',
+            'description' => 'Visite de l\'établissement et rencontre avec les enseignants.',
+            'type'        => 'event',
+            'start_date'  => CarbonImmutable::parse($first->start_date)->addMonths(2),
+        ]];
+
+        // Jalons de fin de période : composition, conseil, bulletins, congés.
+        foreach ($this->periods as $period) {
+            $end = CarbonImmutable::parse($period->end_date);
+
+            $events[] = [
+                'title'       => 'Compositions — ' . $period->name,
+                'description' => 'Épreuves de synthèse de fin de période.',
+                'type'        => 'exam',
+                'start_date'  => $end->subWeek(),
+                'end_date'    => $end->subDays(3),
+                'color'       => '#eb6834',
+            ];
+
+            $events[] = [
+                'title'       => 'Conseils de classe — ' . $period->name,
+                'description' => 'Délibérations et appréciations par classe.',
+                'type'        => 'meeting',
+                'start_date'  => $end->addDays(3),
+                'start_time'  => '08:00',
+                'end_time'    => '13:00',
+                'all_day'     => false,
+            ];
+
+            $events[] = [
+                'title'       => 'Remise des bulletins — ' . $period->name,
+                'description' => 'Réception des parents et remise des bulletins.',
+                'type'        => 'meeting',
+                'start_date'  => $end->addDays(7),
+            ];
+
+            $events[] = [
+                'title'       => 'Congés de fin de ' . Str::lower($period->name),
+                'type'        => 'holiday',
+                'start_date'  => $end->addDays(8),
+                'end_date'    => $end->addDays(20),
+                'color'       => '#1baf7a',
+            ];
+        }
+
+        foreach ($this->nationalHolidays($first->start_date, $last->end_date) as $date => $title) {
+            $events[] = [
+                'title'      => $title,
+                'type'       => 'holiday',
+                'start_date' => $date,
+                'color'      => '#1baf7a',
+            ];
+        }
+
+        // Sessions officielles déjà saisies dans le module Examens.
+        foreach (DB::table('official_exams')->where('academic_year_id', $this->year->id)->get() as $exam) {
+            $events[] = [
+                'title'       => 'Examen officiel — ' . $exam->name . ' (session ' . $exam->session . ')',
+                'description' => 'Centre : ' . $exam->center,
+                'type'        => 'exam',
+                'start_date'  => $exam->exam_date,
+                'color'       => '#eb6834',
+            ];
+        }
+
+        foreach ($events as $event) {
+            CalendarEvent::firstOrCreate(
+                [
+                    // La date fait partie de la clé : une fête légale revient d'une
+                    // année civile à l'autre sous le même intitulé.
+                    'title'            => $event['title'],
+                    'start_date'       => CarbonImmutable::parse($event['start_date'])->toDateString(),
+                    'academic_year_id' => $this->year->id,
+                ],
+                [
+                    'description' => $event['description'] ?? null,
+                    'type'        => $event['type'],
+                    'end_date'    => isset($event['end_date']) ? CarbonImmutable::parse($event['end_date'])->toDateString() : null,
+                    'all_day'     => $event['all_day'] ?? true,
+                    'start_time'  => $event['start_time'] ?? null,
+                    'end_time'    => $event['end_time'] ?? null,
+                    'color'       => $event['color'] ?? null,
+                    'created_by'  => $author,
+                ],
+            );
+        }
+    }
+
+    /**
+     * Jours fériés togolais tombant dans l'intervalle donné.
+     *
+     * @return array<string, string> date ISO => libellé
+     */
+    private function nationalHolidays(string $from, string $to): array
+    {
+        $start = CarbonImmutable::parse($from);
+        $end   = CarbonImmutable::parse($to);
+
+        $fixed = [
+            '01-01' => 'Jour de l\'An',
+            '01-13' => 'Fête de la Libération nationale',
+            '04-27' => 'Fête de l\'Indépendance',
+            '05-01' => 'Fête du Travail',
+            '06-21' => 'Journée des Martyrs',
+            '08-15' => 'Assomption',
+            '11-01' => 'Toussaint',
+            '12-25' => 'Noël',
+        ];
+
+        $holidays = [];
+
+        foreach (range($start->year, $end->year) as $year) {
+            foreach ($fixed as $dayMonth => $title) {
+                $date = CarbonImmutable::parse($year . '-' . $dayMonth);
+
+                if ($date->between($start, $end)) {
+                    $holidays[$date->toDateString()] = $title;
+                }
+            }
+        }
+
+        return $holidays;
     }
 
     /* ------------------------------------------------------------------ */
