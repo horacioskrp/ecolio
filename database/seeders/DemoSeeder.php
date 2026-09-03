@@ -649,12 +649,27 @@ class DemoSeeder extends Seeder
     /* ------------------------------------------------------------------ */
 
     /**
+     * Garantit la catégorie des types d'évaluation, dont dépend le calcul
+     * Classe/Compo du bulletin : la « Composition » doit être en catégorie
+     * `composition`, l'interrogation et le devoir en `continu`. Sans cela la
+     * colonne Compo du bulletin reste vide et la composition est diluée dans la
+     * note de classe. Défensif : les données de référence peuvent avoir dérivé.
+     */
+    private function ensureEvaluationTypeCategories(): void
+    {
+        EvaluationType::query()->where('name', 'Composition')->update(['category' => 'composition']);
+        EvaluationType::query()->whereIn('name', ['Interrogation', 'Devoir'])->update(['category' => 'continu']);
+    }
+
+    /**
      * Une interrogation, un devoir et une composition par matière et par période.
      * Les épreuves passées sont marquées « completed » ; la composition de la
      * période courante reste planifiée — une démo montre aussi du travail en cours.
      */
     private function seedEvaluations(): void
     {
+        $this->ensureEvaluationTypeCategories();
+
         $types         = EvaluationType::query()->get()->keyBy('name');
         $classSubjects = ClassSubject::query()
             ->whereIn('class_id', $this->classes->pluck('id'))
