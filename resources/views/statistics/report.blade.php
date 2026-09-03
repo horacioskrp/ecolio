@@ -47,7 +47,7 @@
         <table>
             <tr><th>Classe</th><th class="n">Garçons</th><th class="n">Filles</th><th class="n">Total</th></tr>
             @foreach ($data['by_class'] as $c)
-                <tr><td>{{ $c->name }}</td><td class="n">{{ $c->male }}</td><td class="n">{{ $c->female }}</td><td class="n">{{ $c->total }}</td></tr>
+                <tr><td>{{ $c['name'] }}</td><td class="n">{{ $c['male'] }}</td><td class="n">{{ $c['female'] }}</td><td class="n">{{ $c['total'] }}</td></tr>
             @endforeach
         </table>
 
@@ -56,7 +56,7 @@
             <table>
                 <tr><th>Ville</th><th class="n">Élèves</th></tr>
                 @foreach ($data['by_city'] as $c)
-                    <tr><td>{{ $c->city }}</td><td class="n">{{ $c->total }}</td></tr>
+                    <tr><td>{{ $c['city'] }}</td><td class="n">{{ $c['total'] }}</td></tr>
                 @endforeach
             </table>
         @endif
