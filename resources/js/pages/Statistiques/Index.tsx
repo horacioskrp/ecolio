@@ -3,7 +3,7 @@ import { BarChart3, Download, FileSpreadsheet, GraduationCap, Layers, MapPin, Pi
 import { useState } from 'react';
 import {
     Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart,
-    ResponsiveContainer, Tooltip as RTooltip, Treemap, XAxis, YAxis,
+    ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, Treemap, XAxis, YAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -34,7 +34,7 @@ interface Enrollment {
 interface Finance {
     billed: number; collected: number; remaining: number; recovery_rate: number;
     total_invoices: number; paid_count: number; partial_count: number; unpaid_count: number;
-    by_class: { name: string; billed: number; collected: number; rate: number }[];
+    by_class: { name: string; cycle: string; billed: number; collected: number; remaining: number; rate: number }[];
     by_method: { method: string; total: number; count: number }[];
     monthly: { month: string; total: number }[];
 }
@@ -222,6 +222,19 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
     // Pyramide des âges par sexe : garçons à gauche (valeurs négatives), filles à droite.
     const agePyramid = enrollment.age_distribution.map((d) => ({ age: d.age, male: -d.male, female: d.female }));
     const ageAxisMax = Math.max(1, ...enrollment.age_distribution.map((d) => Math.max(d.male, d.female)));
+
+    /* ---- Finances : recouvrement par classe, filtrable par cycle. ---- */
+    const finCycles = [...new Set(finance.by_class.map((c) => c.cycle))];
+    const [finCycle, setFinCycle] = useState<string>('Tous');
+    const [finSort, setFinSort] = useState<'facture' | 'taux'>('facture');
+    const finClasses = (() => {
+        const f = finance.by_class.filter((c) => finCycle === 'Tous' || c.cycle === finCycle);
+        // Tri par taux = les classes en retard d'abord (croissant) ; par montant = les plus grosses d'abord.
+        return finSort === 'taux' ? [...f].sort((a, b) => a.rate - b.rate) : [...f].sort((a, b) => b.billed - a.billed);
+    })();
+    // Couleur du taux par palier (statut, toujours accompagné du chiffre).
+    const rateColor = (r: number) => (r >= 80 ? '#16a34a' : r >= 60 ? '#d97706' : '#dc2626');
+    const finChartHeight = Math.max(220, finClasses.length * 24 + 28);
 
     /* ---- Comparaisons : l'année active est en cours, ses taux de fin d'année
        (redoublement, abandon, admission) ne sont pas encore décidés. On les met à
@@ -472,20 +485,80 @@ export default function StatisticsIndex({ filters, academicYears, classes, enrol
                                 </ResponsiveContainer>
                             </Card>
                         </div>
-                        <Card title="Recouvrement par classe" icon={<Wallet className="w-4 h-4" />}>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead><tr className="text-left text-xs text-gray-500 uppercase border-b border-gray-100 dark:border-gray-700">
-                                        <th className="py-2">Classe</th><th className="py-2 text-right">Facturé</th><th className="py-2 text-right">Encaissé</th><th className="py-2 text-right">Taux</th></tr></thead>
-                                    <tbody>{finance.by_class.map((c) => (
-                                        <tr key={c.name} className="border-b border-gray-50 dark:border-gray-700/50">
-                                            <td className="py-2">{c.name}</td><td className="py-2 text-right">{money(c.billed)}</td>
-                                            <td className="py-2 text-right text-green-600">{money(c.collected)}</td>
-                                            <td className="py-2 text-right font-semibold">{c.rate}%</td>
-                                        </tr>))}</tbody>
-                                </table>
+                        {/* Recouvrement par classe — filtrable, plusieurs situations */}
+                        <div className="space-y-5">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-900 dark:text-white mr-2 flex items-center gap-2"><Wallet className="w-4 h-4 text-gray-400" /> Recouvrement par classe</span>
+                                {['Tous', ...finCycles].map((c) => (
+                                    <button key={c} type="button" onClick={() => setFinCycle(c)}
+                                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${finCycle === c ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+                                        {c}
+                                    </button>
+                                ))}
+                                <div className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                                    <span className="mr-1">Tri</span>
+                                    {(['facture', 'taux'] as const).map((s) => (
+                                        <button key={s} type="button" onClick={() => setFinSort(s)}
+                                            className={`px-2 py-1 rounded-md transition-colors ${finSort === s ? 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                            {s === 'facture' ? 'Par montant' : 'Par taux'}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </Card>
+
+                            <div className="grid lg:grid-cols-2 gap-5">
+                                <Card title="Facturé : encaissé / reste à recouvrer" icon={<Wallet className="w-4 h-4" />}>
+                                    <ResponsiveContainer width="100%" height={finChartHeight}>
+                                        <BarChart layout="vertical" data={finClasses} margin={{ top: 4, right: 12, left: 8, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => (Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}k` : String(v))} />
+                                            <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fill: theme.axis }} axisLine={false} tickLine={false} />
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v, n) => [money(Number(v)), n]} />
+                                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                                            <Bar dataKey="collected" name="Encaissé" stackId="m" fill={GREEN} maxBarSize={20} />
+                                            <Bar dataKey="remaining" name="Reste à recouvrer" stackId="m" fill="#f59e0b" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </Card>
+                                <Card title="Taux de recouvrement par classe" icon={<TrendingUp className="w-4 h-4" />}>
+                                    <ResponsiveContainer width="100%" height={finChartHeight}>
+                                        <BarChart layout="vertical" data={finClasses} margin={{ top: 4, right: 36, left: 8, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                                            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: theme.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                                            <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11, fill: theme.axis }} axisLine={false} tickLine={false} />
+                                            <RTooltip contentStyle={theme.tooltip.contentStyle} itemStyle={theme.tooltip.itemStyle} formatter={(v) => [`${v}%`, 'Taux']} />
+                                            <ReferenceLine x={finance.recovery_rate} stroke={theme.axis} strokeDasharray="4 3" label={{ value: `moy. ${finance.recovery_rate}%`, fontSize: 10, fill: theme.tick, position: 'top' }} />
+                                            <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                                                {finClasses.map((c) => <Cell key={c.name} fill={rateColor(c.rate)} />)}
+                                                <LabelList dataKey="rate" position="right" formatter={(v) => `${v}%`} style={{ fontSize: 10, fill: theme.tick }} />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#16a34a' }} /> ≥ 80 %</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#d97706' }} /> 60–79 %</span>
+                                        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#dc2626' }} /> &lt; 60 %</span>
+                                    </div>
+                                </Card>
+                            </div>
+
+                            <Card title="Détail par classe" icon={<BarChart3 className="w-4 h-4" />}>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead><tr className="text-left text-xs text-gray-500 uppercase border-b border-gray-100 dark:border-gray-700">
+                                            <th className="py-2">Classe</th><th className="py-2 text-right">Facturé</th><th className="py-2 text-right">Encaissé</th><th className="py-2 text-right">Reste</th><th className="py-2 text-right">Taux</th></tr></thead>
+                                        <tbody>{finClasses.map((c) => (
+                                            <tr key={c.name} className="border-b border-gray-50 dark:border-gray-700/50">
+                                                <td className="py-2">{c.name}</td>
+                                                <td className="py-2 text-right">{money(c.billed)}</td>
+                                                <td className="py-2 text-right text-green-600">{money(c.collected)}</td>
+                                                <td className="py-2 text-right text-amber-600">{money(c.remaining)}</td>
+                                                <td className="py-2 text-right font-semibold" style={{ color: rateColor(c.rate) }}>{c.rate}%</td>
+                                            </tr>))}</tbody>
+                                    </table>
+                                </div>
+                            </Card>
+                        </div>
                     </div>
                 )}
 

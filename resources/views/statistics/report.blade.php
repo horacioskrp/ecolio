@@ -19,6 +19,8 @@
     th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; }
     td.n, th.n { text-align: right; }
     .kpis td { font-weight: bold; }
+    {{-- En-tête ministérielle unifiée (dont le plafond de taille du logo). --}}
+    {!! $headerCss !!}
 </style>
 </head>
 <body>

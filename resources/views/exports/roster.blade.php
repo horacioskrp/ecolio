@@ -30,18 +30,15 @@
 
         .footer { margin-top: 16px; font-size: 9px; color: #888; display: flex; justify-content: space-between; }
         .sign { margin-top: 36px; text-align: right; font-size: 11px; }
+        {{-- En-tête ministérielle unifiée (identique au bulletin). --}}
+        {!! $headerCss !!}
     </style>
 </head>
 <body>
+    {!! $headerHtml !!}
     <div class="header">
-        @if($school)
-            <div class="terme">{{ $school->terme ?? 'République Togolaise' }}</div>
-            @if($school->devise)<div class="devise">{{ $school->devise }}</div>@endif
-            <div class="school">{{ $school->name }}</div>
-        @endif
         <div class="title">LISTE DES ÉLÈVES</div>
         <div class="subtitle">Classe : {{ $classroom->name }} ({{ $classroom->code }}) — Année : {{ $year->year }}</div>
-        <hr class="rule">
     </div>
 
     <div class="meta">
