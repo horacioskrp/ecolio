@@ -19,6 +19,9 @@
     th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; }
     td.n, th.n { text-align: right; }
     .kpis td { font-weight: bold; }
+    {{-- Styles de l'en-tête ministériel (dont le plafond de taille du logo) : sans eux
+         le logo s'affiche à sa taille naturelle et écrase l'en-tête. --}}
+    {!! $headerCss !!}
 </style>
 </head>
 <body>
