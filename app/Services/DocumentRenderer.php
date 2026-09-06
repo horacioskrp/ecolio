@@ -370,8 +370,10 @@ class DocumentRenderer
     }
 
     /**
-     * CSS de l'en-tête officiel (ministériel + logo), réutilisable par des
-     * documents qui n'embarquent pas tout le baseCss (ex. bulletin de paie).
+     * CSS de l'en-tête officiel (ministériel + logo). **Source unique** : tous les
+     * documents (bulletin, bulletin de paie, export statistiques, certificats et
+     * attestations) partagent exactement cette en-tête. Ne pas redéfinir les
+     * règles `.mh-*` ou `.doc-mheader` ailleurs — {@see baseCss()} la compose.
      */
     public function headerCss(): string
     {
@@ -393,22 +395,12 @@ class DocumentRenderer
 
     protected function baseCss(): string
     {
-        return <<<CSS
+        // L'en-tête ministérielle (règles .mh-* / .doc-mheader) vient d'une source
+        // unique — headerCss() — pour que les documents officiels partagent
+        // exactement l'en-tête du bulletin. Ici, seuls le corps et la signature.
+        return $this->headerCss() . <<<CSS
         * { box-sizing: border-box; }
         body { font-family: 'DejaVu Sans', sans-serif; color: #1a1a1a; font-size: 13px; line-height: 1.6; margin: 0; }
-        /* En-tête officiel ministériel (3 colonnes) */
-        .doc-mheader { margin-bottom: 32px; border-bottom: 1px solid #000; padding-bottom: 16px;
-            font-family: 'DejaVu Serif', 'Times New Roman', serif; }
-        .mh-table { width: 100%; border-collapse: collapse; }
-        .mh-col { vertical-align: middle; text-align: center; padding: 0 6px; }
-        .mh-logo { width: 24%; }
-        .mh-logo-img { max-width: 100px; max-height: 100px; object-fit: contain; }
-        .mh-ministere { font-size: 11px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.4px; }
-        .mh-school { font-size: 17px; font-weight: bold; text-transform: uppercase; margin: 4px 0; }
-        .mh-info { font-size: 10.5px; }
-        .mh-republic { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px; }
-        .mh-motto { font-size: 11px; font-style: italic; font-weight: bold; margin-top: 2px; }
-        .mh-sep { width: 50px; height: 1px; background: #000; margin: 5px auto; }
         .doc-body { margin: 28px 0; }
         .doc-body h1, .doc-body h2 { text-align: center; text-transform: uppercase; }
         .doc-signature { margin-top: 48px; text-align: right; }
