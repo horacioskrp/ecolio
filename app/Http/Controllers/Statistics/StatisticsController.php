@@ -62,6 +62,7 @@ class StatisticsController extends Controller
 
             $html = view('statistics.report', [
                 'header'   => $renderer->headerHtml($school, $vars),
+                'headerCss' => $renderer->headerCss(),
                 'section'  => $section,
                 'data'     => $data,
                 'year'     => optional(AcademicYear::find($filters['academic_year_id']))->year,

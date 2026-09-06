@@ -188,19 +188,24 @@ class StatisticsService
         $billed    = (float) ($stats->billed ?? 0);
         $collected = (float) ($stats->collected ?? 0);
 
-        // Recouvrement par classe
+        // Recouvrement par classe (avec cycle + reste, pour filtre et charts détaillés)
         $byClass = (clone $inv)
             ->join('classes', 'enrollments.class_id', '=', 'classes.id')
-            ->selectRaw('classes.name AS name,
+            ->leftJoin('classroom_types', 'classroom_types.id', '=', 'classes.classroom_type_id')
+            ->selectRaw('classes.name AS name, classroom_types.name AS cycle,
                 COALESCE(SUM(invoices.total), 0) AS billed,
-                COALESCE(SUM(invoices.amount_paid), 0) AS collected')
-            ->groupBy('classes.name')
-            ->orderByDesc('billed')
+                COALESCE(SUM(invoices.amount_paid), 0) AS collected,
+                COALESCE(SUM(invoices.amount_remaining), 0) AS remaining')
+            ->groupBy('classes.name', 'classroom_types.name', 'classes.expected_age')
+            ->orderByRaw('classes.expected_age NULLS LAST')
+            ->orderBy('classes.name')
             ->get()
             ->map(fn ($r) => [
                 'name'      => $r->name,
+                'cycle'     => $this->cycleLabel($r->cycle),
                 'billed'    => (float) $r->billed,
                 'collected' => (float) $r->collected,
+                'remaining' => (float) $r->remaining,
                 'rate'      => $r->billed > 0 ? round($r->collected / $r->billed * 100, 1) : 0.0,
             ]);
 

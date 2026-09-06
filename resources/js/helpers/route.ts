@@ -157,6 +157,7 @@ export function route(name: string, params?: any): string {
         'backups.restore': '/settings/backups/restore',
         'backups.download': `/settings/backups/${params}/download`,
         'backups.destroy': `/settings/backups/${params}`,
+        'about.index': '/settings/about',
 
         'fee-structures.index': '/fee-structures',
         'fee-structures.replicate': '/fee-structures/replicate',

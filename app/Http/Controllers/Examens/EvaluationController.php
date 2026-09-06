@@ -220,7 +220,11 @@ class EvaluationController extends Controller
 
         $school = School::where('active', true)->first();
 
-        $html = view('exports.planning', compact('classroom', 'evaluations', 'school', 'activeYear'))->render();
+        $renderer   = app(\App\Services\DocumentRenderer::class);
+        $headerHtml = $school ? $renderer->headerHtml($school, $renderer->resolveVariables($school)) : '';
+        $headerCss  = $renderer->headerCss();
+
+        $html = view('exports.planning', compact('classroom', 'evaluations', 'school', 'activeYear', 'headerHtml', 'headerCss'))->render();
 
         return response($html)->header('Content-Type', 'text/html');
     }
