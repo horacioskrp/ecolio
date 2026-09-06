@@ -7,7 +7,6 @@ import AppLayout from '@/layouts/app-layout';
 
 interface Props {
     app: { name: string; version: string; laravel: string; php: string; environment: string };
-    school: string | null;
 }
 
 const GITHUB = 'https://github.com/wearedalibi/dalibi';
@@ -36,7 +35,7 @@ function Card({ children }: { children: React.ReactNode }) {
     return <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card p-5 shadow-sm">{children}</div>;
 }
 
-export default function About({ app, school }: Readonly<Props>) {
+export default function About({ app }: Readonly<Props>) {
     const brand = app.name ? app.name.charAt(0).toUpperCase() + app.name.slice(1) : 'Dalibi';
 
     return (
@@ -129,7 +128,6 @@ export default function About({ app, school }: Readonly<Props>) {
                             <div className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">Laravel</dt><dd className="font-mono font-medium text-gray-900 dark:text-white">{app.laravel}</dd></div>
                             <div className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">PHP</dt><dd className="font-mono font-medium text-gray-900 dark:text-white">{app.php}</dd></div>
                             <div className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">Environnement</dt><dd className="font-mono font-medium text-gray-900 dark:text-white">{app.environment}</dd></div>
-                            {school && <div className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">Établissement</dt><dd className="font-medium text-gray-900 dark:text-white text-right truncate max-w-[60%]">{school}</dd></div>}
                         </dl>
                     </Card>
                 </div>

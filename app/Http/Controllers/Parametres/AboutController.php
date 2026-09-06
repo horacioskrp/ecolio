@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Parametres;
 
 use App\Http\Controllers\Controller;
-use App\Models\School;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,7 +26,6 @@ class AboutController extends Controller
                 'php'         => PHP_VERSION,
                 'environment' => app()->environment(),
             ],
-            'school' => School::query()->value('name'),
         ]);
     }
 }
