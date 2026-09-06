@@ -42,14 +42,16 @@
         body { padding: 16px; }
         @page { margin: 1cm; size: A4 landscape; }
     }
+    /* En-tête ministérielle unifiée (identique au bulletin). */
+    {!! $headerCss !!}
 </style>
 </head>
 <body>
 
 <button class="print-btn" onclick="window.print()">🖨 Imprimer / PDF</button>
 
-<div class="header">
-    <div class="school-name">{{ $school?->name ?? 'Établissement scolaire' }}</div>
+{!! $headerHtml !!}
+<div class="header" style="border-bottom:none; margin-bottom:20px; padding-bottom:0;">
     <div class="doc-title">Planning des examens</div>
     <div class="meta">
         Classe : <strong>{{ $classroom->name }} ({{ $classroom->code }})</strong>
