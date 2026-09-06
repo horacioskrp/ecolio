@@ -395,6 +395,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/backups/{backup}/verify', [\App\Http\Controllers\Parametres\BackupController::class, 'verify'])->middleware('can:view_backups')->name('backups.verify');
     Route::delete('settings/backups/{backup}', [\App\Http\Controllers\Parametres\BackupController::class, 'destroy'])->middleware('can:delete_backups')->name('backups.destroy');
 
+    // À propos (informations sur l'application) — accessible à tout utilisateur connecté
+    Route::get('settings/about', [\App\Http\Controllers\Parametres\AboutController::class, 'index'])->name('about.index');
+
     // Passage de classe / réinscription en masse
     Route::get('promotion', [PromotionController::class, 'index'])->middleware('can:execute_promotion')->name('promotion.index');
     Route::post('promotion', [PromotionController::class, 'store'])->middleware('can:execute_promotion')->name('promotion.store');
