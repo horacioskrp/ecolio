@@ -23,15 +23,13 @@
         .slot-meta { font-size: 9px; color: #555; }
         .empty { color: #ccc; text-align: center; }
         .footer { margin-top: 12px; font-size: 9px; color: #888; text-align: right; }
+        {{-- En-tête ministérielle unifiée (identique au bulletin). --}}
+        {!! $headerCss !!}
     </style>
 </head>
 <body>
+    {!! $headerHtml !!}
     <div class="header">
-        @if($school)
-            <div class="terme">{{ $school->terme ?? 'République Togolaise' }}</div>
-            @if($school->devise)<div class="devise">{{ $school->devise }}</div>@endif
-            <div class="school">{{ $school->name }}</div>
-        @endif
         <div class="title">EMPLOI DU TEMPS</div>
         <div class="subtitle">Classe : {{ $classroom->name }}</div>
     </div>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\School;
+use App\Services\DocumentRenderer;
 use App\Models\Subject;
 use App\Models\TimetableSlot;
 use App\Models\User;
@@ -84,8 +85,12 @@ class TimetableController extends Controller
             $grid[$range][$slot->day_of_week] = $slot;
         }
 
+        $renderer = app(DocumentRenderer::class);
+
         $pdf = Pdf::loadView('exports.timetable', [
             'school'     => $school,
+            'headerHtml' => $school ? $renderer->headerHtml($school, $renderer->resolveVariables($school)) : '',
+            'headerCss'  => $renderer->headerCss(),
             'classroom'  => $classroom,
             'days'       => TimetableSlot::DAYS,
             'timeRanges' => $timeRanges,
