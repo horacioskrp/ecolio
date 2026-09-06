@@ -44,26 +44,21 @@ export default function About({ app, school }: Readonly<Props>) {
             <Head title="À propos" />
             <div className="w-full max-w-5xl mx-auto space-y-6 p-1">
 
-                {/* En-tête */}
+                {/* En-tête : logo officiel Dalibi (version blanche en mode sombre) + version */}
                 <div className="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card p-6 shadow-sm">
-                    <div className="flex items-start gap-4">
-                        <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-sky-600 p-3.5 shadow-sm shrink-0">
-                            <GraduationCap className="w-9 h-9 text-white" />
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2.5">
-                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{brand}</h1>
-                                <a href={`${GITHUB}/releases/tag/v${app.version}`} target="_blank" rel="noopener noreferrer"
-                                    className="inline-flex items-center rounded-full border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
-                                    v{app.version}
-                                </a>
-                            </div>
-                            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                                Système de gestion scolaire — de l’inscription de l’élève au bulletin, en passant par l’écolage et la paie.
-                                Pensé pour les établissements togolais 🇹🇬.
-                            </p>
-                        </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <h1 className="sr-only">{brand}</h1>
+                        <img src="/svgs/dalibi.svg" alt={brand} className="h-11 w-auto dark:hidden" />
+                        <img src="/svgs/dalibi-blanc.svg" alt={brand} className="h-11 w-auto hidden dark:block" />
+                        <a href={`${GITHUB}/releases/tag/v${app.version}`} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center rounded-full border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                            v{app.version}
+                        </a>
                     </div>
+                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                        Système de gestion scolaire — de l’inscription de l’élève au bulletin, en passant par l’écolage et la paie.
+                        Pensé pour les établissements togolais 🇹🇬.
+                    </p>
                 </div>
 
                 {/* Liens utiles */}
