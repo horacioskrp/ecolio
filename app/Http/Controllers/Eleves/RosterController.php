@@ -8,6 +8,7 @@ use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Enrollment;
 use App\Models\School;
+use App\Services\DocumentRenderer;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -112,14 +113,17 @@ class RosterController extends Controller
             ->sortBy(fn ($e) => $e->student?->lastname)
             ->values();
 
-        $school = School::where('active', true)->first() ?? School::query()->first();
+        $school   = School::where('active', true)->first() ?? School::query()->first();
+        $renderer = app(DocumentRenderer::class);
 
         $pdf = Pdf::loadView('exports.roster', [
-            'school'    => $school,
-            'classroom' => $classroom,
-            'year'      => $year,
-            'students'  => $students,
-            'statuses'  => Enrollment::ACADEMIC_STATUSES,
+            'school'     => $school,
+            'headerHtml' => $school ? $renderer->headerHtml($school, $renderer->resolveVariables($school)) : '',
+            'headerCss'  => $renderer->headerCss(),
+            'classroom'  => $classroom,
+            'year'       => $year,
+            'students'   => $students,
+            'statuses'   => Enrollment::ACADEMIC_STATUSES,
         ])->setPaper('a4', 'portrait');
 
         return $pdf->stream('effectifs-' . Str::slug($classroom->name . '-' . $year->year) . '.pdf');
